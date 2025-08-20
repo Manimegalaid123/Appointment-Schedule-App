@@ -5,16 +5,22 @@ const jwt = require('jsonwebtoken');
 
 exports.signup = async (req, res) => {
   try {
-    const { name, email, phone, password, role, businessType, businessName } = req.body;
+    const { name, email, phone, password, role, businessType, businessData } = req.body;
     const hashedPassword = await bcrypt.hash(password, 10);
 
     let user = new User({ name, email, phone, password: hashedPassword, role });
     await user.save();
 
-    // If manager, create business
-    if (role === 'manager') {
+    // If manager, create business with all details
+    if (role === 'manager' && businessData) {
       const business = new Business({
-        businessName,
+        businessName: businessData.businessName,
+        businessAddress: businessData.businessAddress,
+        services: businessData.services,
+        workingHours: businessData.workingHours,
+        specialization: businessData.specialization,
+        doctors: businessData.doctors,
+        courses: businessData.courses,
         email,
         phone,
         owner: user._id,
@@ -25,7 +31,7 @@ exports.signup = async (req, res) => {
 
     res.status(201).json({ message: 'Signup successful' });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ message: err.message });
   }
 };
 

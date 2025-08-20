@@ -70,15 +70,10 @@ const HomePage = () => {
                   className="primary-btn"
                   onClick={() => navigate('/signup')}
                 >
-                  Start Booking Now
+                 Get Started
                   <ArrowRight className="btn-icon" />
                 </button>
-                <button 
-                  className="secondary-btn"
-                  onClick={() => navigate('/signup')}
-                >
-                  For Business Owners
-                </button>
+             
               </div>
 
               <div className="hero-features">

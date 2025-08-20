@@ -49,12 +49,16 @@ const LoginPage = () => {
       const businessType = res.data.businessType || 'business';
       const businessName = encodeURIComponent(res.data.businessName || name);
       const businessEmail = encodeURIComponent(formData.email);
+      // After successful login/signup
+      localStorage.setItem('email', formData.email); // user.email is the logged-in customer's email
       if (role === 'customer') {
         navigate(`/customer-dashboard/${name}`);
       } else if (role === 'manager') {
         if (businessType === 'salon') navigate(`/salon-dashboard/${businessEmail}`);
-        else if (businessType === 'consultancy') navigate(`/consultant-dashboard/${name}`);
+        else if (businessType === 'consultancy') navigate(`/consultant-dashboard/${formData.email}`);
         else navigate(`/manager-dashboard/${name}`);
+      } else if (role === 'consultant') {
+        navigate(`/consultant-dashboard/${formData.email}`);
       }
     } catch (error) {
       setErrors({ submit: error.response?.data?.message || 'Invalid credentials. Please check your email and password.' });
@@ -81,7 +85,7 @@ const LoginPage = () => {
         <div className="nav-content">
           <div className="nav-brand">
             <div className="brand-icon"><Calendar size={24} /></div>
-            <span className="brand-text">AppointmentHub</span>
+            <span className="brand-text">AppointEase</span>
           </div>
           <div className="nav-actions">
             <span className="nav-text">New here?</span>
@@ -133,21 +137,21 @@ const LoginPage = () => {
               </div>
 
               {/* Email Field */}
-              <div className="form-group">
+              <div className="login-form-group">
                 <label className="field-label"><Mail size={16}/> Email Address</label>
                 <input
                   type="email"
                   placeholder="Enter your email address"
                   value={formData.email}
                   onChange={(e) => handleInputChange('email', e.target.value)}
-                  className={`form-input ${errors.email ? 'error' : ''}`}
+                  className={`login-form-input ${errors.email ? 'error' : ''}`}
                   disabled={isLoading}
                 />
                 {errors.email && <p className="field-error"><AlertCircle size={14}/>{errors.email}</p>}
               </div>
 
               {/* Password Field */}
-              <div className="form-group">
+              <div className="login-form-group">
                 <label className="field-label"><Lock size={16}/> Password</label>
                 <div className="password-field">
                   <input
@@ -155,7 +159,7 @@ const LoginPage = () => {
                     placeholder="Enter your password"
                     value={formData.password}
                     onChange={(e) => handleInputChange('password', e.target.value)}
-                    className={`form-input ${errors.password ? 'error' : ''}`}
+                    className={`login-form-input ${errors.password ? 'error' : ''}`}
                     disabled={isLoading}
                   />
                   <button type="button" onClick={() => setShowPassword(!showPassword)} className="password-toggle" disabled={isLoading}>

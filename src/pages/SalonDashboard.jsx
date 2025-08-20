@@ -18,10 +18,17 @@ import {
   CheckCircle,
   XCircle,
   RefreshCw,
-  Download
+  Download,
+  Settings,
+  BarChart3,
+  Users,
+  Scissors,
+  Building2,
+  FileText
 } from 'lucide-react';
 import { appointmentAPI, businessAPI } from '../utils/api';
-import './salonDashboard.css';
+import axios from 'axios';
+import './SalonDashboard.css';
 
 const SalonDashboard = () => {
   const { businessEmail } = useParams();
@@ -34,27 +41,25 @@ const SalonDashboard = () => {
   const [salonInfo, setSalonInfo] = useState(null);
   const [notifications, setNotifications] = useState(0);
 
-  // Fetch salon info from backend
+  // Fetch salon info
   useEffect(() => {
     const fetchSalonInfo = async () => {
       try {
-        setLoading(true);
-        setError('');
-        const email = businessEmail ? decodeURIComponent(businessEmail) : 'glamoursalon@gmail.com';
-        const response = await businessAPI.getByEmail(email);
-        console.log('Salon API response:', response); // <-- Add this for debugging
-        if (response.success && response.business) {
+        const response = await axios.get(
+          `http://localhost:5000/api/business/email/${encodeURIComponent(businessEmail)}`
+        );
+        if (response.data.success && response.data.business) {
           setSalonInfo({
-            _id: response.business._id, // <-- Add this line
-            name: response.business.businessName,
-            email: response.business.email,
-            address: response.business.address,
-            phone: response.business.phone,
-            services: response.business.services || [],
-            workingHours: response.business.workingHours || '9:00 AM - 7:00 PM'
+            _id: response.data.business._id,
+            name: response.data.business.businessName,
+            email: response.data.business.email,
+            address: response.data.business.address,
+            phone: response.data.business.phone,
+            services: response.data.business.services || [],
+            workingHours: response.data.business.workingHours || '9:00 AM - 7:00 PM'
           });
         } else {
-          setError(response.message || 'Salon not found');
+          setError(response.data.message || 'Salon not found');
         }
       } catch (err) {
         setError('Error connecting to server. Please check your internet connection.');
@@ -65,13 +70,12 @@ const SalonDashboard = () => {
     fetchSalonInfo();
   }, [businessEmail]);
 
-  // Load appointments from backend
+  // Load appointments
   useEffect(() => {
     if (!salonInfo?.email) return;
     loadAppointments();
     const interval = setInterval(loadAppointments, 30000);
     return () => clearInterval(interval);
-    // eslint-disable-next-line
   }, [salonInfo?.email]);
 
   const loadAppointments = async () => {
@@ -96,7 +100,7 @@ const SalonDashboard = () => {
     }
   };
 
-  // Handle appointment actions
+  // Handle appointment action
   const handleAppointmentAction = async (appointmentId, action, rescheduleData = null) => {
     try {
       let newStatus;
@@ -124,59 +128,32 @@ const SalonDashboard = () => {
         setNotifications(prev =>
           prev - (action === 'accept' || action === 'reject' ? 1 : 0)
         );
-        alert(
-          action === 'accept'
-            ? 'Appointment accepted!'
-            : action === 'reject'
-            ? 'Appointment rejected!'
-            : 'Reschedule request sent!'
-        );
-      } else {
-       
       }
     } catch (err) {
-      alert('Error updating appointment. Please try again.');
+      console.error('Error updating appointment:', err);
     }
   };
 
-  // Add new service to salon (save to backend)
+  // Add service
   const handleAddService = async (newService) => {
     if (!salonInfo) return;
     try {
-      const updatedServices = [...salonInfo.services, newService];
-      const response = await businessAPI.updateBusiness({
-        _id: salonInfo._id, // Add this line
-        businessName: salonInfo.name, // Use businessName for backend
-        email: salonInfo.email,
-        address: salonInfo.address,
-        phone: salonInfo.phone,
-        services: updatedServices,
-        workingHours: salonInfo.workingHours
-      });
-      if (response.success) {
+      const response = await axios.post(
+        `http://localhost:5000/api/business/email/${encodeURIComponent(salonInfo.email)}/add-service`,
+        { service: newService }
+      );
+      if (response.data.success) {
         setSalonInfo(prev => ({
           ...prev,
-          services: updatedServices
+          services: response.data.services
         }));
-        alert('Service added successfully!');
-      } else {
-        alert('Failed to add service.');
       }
     } catch (err) {
-      alert('Error adding service. Please try again.');
+      console.error('Error adding service:', err);
     }
   };
 
-  // Status color and icon
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'pending': return '#f59e0b';
-      case 'accepted': return '#10b981';
-      case 'rejected': return '#ef4444';
-      case 'rescheduled': return '#3b82f6';
-      default: return '#6b7280';
-    }
-  };
+  // Status helpers
   const getStatusIcon = (status) => {
     switch (status) {
       case 'pending': return <AlertCircle size={16} />;
@@ -184,6 +161,16 @@ const SalonDashboard = () => {
       case 'rejected': return <XCircle size={16} />;
       case 'rescheduled': return <RefreshCw size={16} />;
       default: return <Clock size={16} />;
+    }
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'pending': return '#FFA500'; // Orange
+      case 'accepted': return '#4CAF50'; // Green
+      case 'rejected': return '#F44336'; // Red
+      case 'rescheduled': return '#2196F3'; // Blue
+      default: return '#9E9E9E'; // Grey
     }
   };
 
@@ -205,7 +192,7 @@ const SalonDashboard = () => {
     rejected: appointments.filter(apt => apt.status === 'rejected').length
   };
 
-  // Export appointments to CSV
+  // Export CSV
   const exportAppointments = () => {
     const headers = ['Name', 'Phone', 'Service', 'Date', 'Time', 'Status', 'Notes', 'Created At'];
     const csvData = [
@@ -231,384 +218,308 @@ const SalonDashboard = () => {
     URL.revokeObjectURL(url);
   };
 
-  // Loading or error state
   if (loading && !salonInfo) {
     return (
-      <div className="salon-dashboard">
-        <div className="loading-state">
-          <RefreshCw size={48} className="spinning" />
-          <h3>Loading salon dashboard...</h3>
+      <div className="loading-container">
+        <div className="loading-content">
+          <RefreshCw size={48} className="loading-spinner" />
+          <h3>Loading Salon Dashboard</h3>
+          <p>Please wait while we load your salon information...</p>
         </div>
       </div>
     );
   }
+
   if (error && !salonInfo) {
     return (
-      <div className="salon-dashboard">
-        <div className="error-banner">
-          <AlertCircle size={20} />
-          <span>{error}</span>
+      <div className="error-container">
+        <div className="error-content">
+          <AlertCircle size={48} className="error-icon" />
+          <h3>Unable to Load Dashboard</h3>
+          <p>{error}</p>
+          <button className="retry-btn" onClick={() => window.location.reload()}>
+            <RefreshCw size={16} /> Retry
+          </button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="salon-dashboard">
+    <div className="dashboard-container">
       {/* Header */}
       <header className="dashboard-header">
-        <div className="header-container">
+        <div className="header-content">
           <div className="header-left">
-            <div className="salon-logo">
-              <Calendar size={20} />
-            </div>
-            <div>
-              <h1 className="salon-title">{salonInfo?.name}</h1>
-              <p className="salon-subtitle">
-                Salon Manager Dashboard • {salonInfo?.email}
-              </p>
+            <div className="logo-section">
+              <Scissors size={24} className="logo-icon" />
+              <div className="salon-info">
+                <h1 className="salon-name">{salonInfo?.name}</h1>
+                <p className="salon-tagline">Professional Salon Management</p>
+              </div>
             </div>
           </div>
           <div className="header-right">
-            <div className="notification-icon">
+            <div className="notification-badge">
               <Bell size={20} />
-              {notifications > 0 && (
-                <span className="notification-badge">{notifications}</span>
-              )}
+              {notifications > 0 && <span className="badge-count">{notifications}</span>}
             </div>
-            <div className="user-info">
-              <User size={16} style={{ color: '#64748b' }} />
+            <div className="user-menu">
+              <User size={16} />
               <span>Manager</span>
-              <ChevronDown size={16} style={{ color: '#64748b' }} />
+              <ChevronDown size={16} />
             </div>
-            <LogOut size={20} className="logout-icon" />
+            <button className="logout-btn">
+              <LogOut size={20} />
+            </button>
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <div className="main-container">
-        {/* Stats Cards */}
-        <div className="stats-grid">
-          <div className="stats-card">
-            <div className="stats-card-content">
-              <div className="stats-icon purple">
-                <Calendar size={24} style={{ color: '#7c3aed' }} />
+      {/* Main */}
+      <main className="dashboard-main">
+        {/* Stats */}
+        <section className="stats-section">
+          <div className="stats-grid">
+            <div className="stat-card total">
+              <div className="stat-icon">
+                <BarChart3 size={24} />
               </div>
-              <div>
-                <p className="stats-number">{stats.total}</p>
-                <p className="stats-label">Total Appointments</p>
+              <div className="stat-info">
+                <div className="stat-number">{stats.total}</div>
+                <div className="stat-label">Total Appointments</div>
+              </div>
+            </div>
+            <div className="stat-card pending">
+              <div className="stat-icon">
+                <Clock size={24} />
+              </div>
+              <div className="stat-info">
+                <div className="stat-number">{stats.pending}</div>
+                <div className="stat-label">Pending Requests</div>
+              </div>
+            </div>
+            <div className="stat-card accepted">
+              <div className="stat-icon">
+                <CheckCircle size={24} />
+              </div>
+              <div className="stat-info">
+                <div className="stat-number">{stats.accepted}</div>
+                <div className="stat-label">Confirmed</div>
+              </div>
+            </div>
+            <div className="stat-card rejected">
+              <div className="stat-icon">
+                <XCircle size={24} />
+              </div>
+              <div className="stat-info">
+                <div className="stat-number">{stats.rejected}</div>
+                <div className="stat-label">Declined</div>
               </div>
             </div>
           </div>
-          <div className="stats-card">
-            <div className="stats-card-content">
-              <div className="stats-icon yellow">
-                <Clock size={24} style={{ color: '#f59e0b' }} />
-              </div>
-              <div>
-                <p className="stats-number">{stats.pending}</p>
-                <p className="stats-label">Pending Requests</p>
-              </div>
-            </div>
-          </div>
-          <div className="stats-card">
-            <div className="stats-card-content">
-              <div className="stats-icon green">
-                <Check size={24} style={{ color: '#10b981' }} />
-              </div>
-              <div>
-                <p className="stats-number">{stats.accepted}</p>
-                <p className="stats-label">Accepted</p>
-              </div>
-            </div>
-          </div>
-          <div className="stats-card">
-            <div className="stats-card-content">
-              <div className="stats-icon red">
-                <X size={24} style={{ color: '#ef4444' }} />
-              </div>
-              <div>
-                <p className="stats-number">{stats.rejected}</p>
-                <p className="stats-label">Rejected</p>
-              </div>
-            </div>
-          </div>
-        </div>
+        </section>
 
-        {/* Tab Container */}
-        <div className="tab-container">
-          <div className="tab-navigation">
-            {[
-              { id: 'appointments', label: 'Appointments', count: stats.total },
-              { id: 'salon-info', label: 'Salon Information', count: null },
-              { id: 'settings', label: 'Settings', count: null }
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`tab-button ${activeTab === tab.id ? 'active' : ''}`}
+        {/* Tabs */}
+        <section className="tabs-section">
+          <div className="tabs-container">
+            <nav className="tabs-nav">
+              <button 
+                className={`tab-btn ${activeTab === 'appointments' ? 'active' : ''}`}
+                onClick={() => setActiveTab('appointments')}
               >
-                {tab.label}
-                {tab.count !== null && (
-                  <span className={`tab-count ${activeTab === tab.id ? 'active' : ''}`}>
-                    {tab.count}
-                  </span>
-                )}
+                <Calendar size={18} /> 
+                Appointments 
+                <span className="tab-count">{stats.total}</span>
               </button>
-            ))}
-          </div>
+              <button 
+                className={`tab-btn ${activeTab === 'salon-info' ? 'active' : ''}`}
+                onClick={() => setActiveTab('salon-info')}
+              >
+                <Scissors size={18} /> 
+                Salon Information
+              </button>
+              <button 
+                className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`}
+                onClick={() => setActiveTab('settings')}
+              >
+                <Settings size={18} /> 
+                Settings
+              </button>
+            </nav>
 
-          {/* Tab Content */}
-          <div className="tab-content">
-            {activeTab === 'appointments' && (
-              <div>
-                {/* Action Bar */}
-                <div className="appointment-actions-bar">
-                  <div className="filters">
-                    <div className="search-container">
-                      <Search size={20} className="search-icon" />
-                      <input
-                        type="text"
-                        placeholder="Search appointments..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="search-input"
-                      />
-                    </div>
-                    <select
-                      value={filterStatus}
-                      onChange={(e) => setFilterStatus(e.target.value)}
-                      className="filter-select"
-                    >
-                      <option value="all">All Status</option>
-                      <option value="pending">Pending</option>
-                      <option value="accepted">Accepted</option>
-                      <option value="rejected">Rejected</option>
-                      <option value="rescheduled">Rescheduled</option>
-                    </select>
-                  </div>
-                  <div className="action-buttons-top">
-                    <button
-                      onClick={loadAppointments}
-                      className="refresh-button"
-                      title="Refresh appointments"
-                      disabled={loading}
-                    >
-                      <RefreshCw size={16} className={loading ? 'spinning' : ''} />
-                      {loading ? 'Loading...' : 'Refresh'}
-                    </button>
-                    {appointments.length > 0 && (
-                      <button
-                        onClick={exportAppointments}
-                        className="export-button"
-                        title="Export to CSV"
-                      >
-                        <Download size={16} />
-                        Export
-                      </button>
-                    )}
-                  </div>
-                </div>
-                {/* Real-time Status */}
-                {appointments.length > 0 && (
-                  <div className="real-time-status">
-                    <div className="status-indicator">
-                      <div className="pulse-dot"></div>
-                      <span>Live Updates Active</span>
-                    </div>
-                    <span className="last-updated">
-                      Last checked: {new Date().toLocaleTimeString()}
-                    </span>
-                  </div>
-                )}
-                {/* Loading State */}
-                {loading && appointments.length === 0 && (
-                  <div className="loading-state">
-                    <RefreshCw size={48} className="spinning" />
-                    <h3>Loading appointments...</h3>
-                    <p>Please wait while we fetch your latest appointments.</p>
-                  </div>
-                )}
-                {/* Appointments List */}
-                <div className="appointments-list">
-                  {filteredAppointments.map(appointment => (
-                    <div key={appointment._id} className="appointment-card">
-                      <div className="appointment-layout">
-                        <div className="appointment-details">
-                          {/* Customer Info */}
-                          <div className="customer-info">
-                            <h4>{appointment.customerName}</h4>
-                            <div className="customer-contact">
-                              <div className="contact-item">
-                                <Phone size={14} style={{ color: '#6b7280' }} />
-                                <span>{appointment.customerPhone}</span>
-                              </div>
-                              <div className="contact-item">
-                                <Mail size={14} style={{ color: '#6b7280' }} />
-                                <span>Business Email: {appointment.businessEmail}</span>
-                              </div>
-                            </div>
-                          </div>
-                          {/* Service Info */}
-                          <div className="service-info">
-                            <p>{appointment.service}</p>
-                            <div className="appointment-datetime">
-                              <div className="datetime-item">
-                                <Calendar size={14} style={{ color: '#6b7280' }} />
-                                <span>{new Date(appointment.date).toLocaleDateString()}</span>
-                              </div>
-                              <div className="datetime-item">
-                                <Clock size={14} style={{ color: '#6b7280' }} />
-                                <span>{appointment.time}</span>
-                              </div>
-                            </div>
-                          </div>
-                          {/* Notes */}
-                          <div className="notes-section">
-                            <p className="notes-label">Notes:</p>
-                            <p className="notes-text">
-                              {appointment.notes || 'No special notes'}
-                            </p>
-                            <p className="notes-timestamp">
-                              Requested: {new Date(appointment.createdAt).toLocaleString()}
-                            </p>
-                            {appointment.updatedAt && appointment.updatedAt !== appointment.createdAt && (
-                              <p className="notes-timestamp">
-                                Last updated: {new Date(appointment.updatedAt).toLocaleString()}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                        {/* Status and Actions */}
-                        <div className="appointment-actions">
-                          <div
-                            className="status-badge"
-                            style={{
-                              border: `1px solid ${getStatusColor(appointment.status)}`,
-                              color: getStatusColor(appointment.status)
-                            }}
-                          >
-                            {getStatusIcon(appointment.status)}
-                            <span>{appointment.status}</span>
-                          </div>
-                          {appointment.status === 'pending' && (
-                            <div className="action-buttons">
-                              <button
-                                onClick={() => handleAppointmentAction(appointment._id, 'accept')}
-                                className="action-button accept"
-                              >
-                                <Check size={16} />
-                                Accept
-                              </button>
-                              <button
-                                onClick={() => handleAppointmentAction(appointment._id, 'reject')}
-                                className="action-button reject"
-                              >
-                                <X size={16} />
-                                Reject
-                              </button>
-                              <button
-                                onClick={() => {
-                                  const newDate = prompt('Enter new date (YYYY-MM-DD):', appointment.date);
-                                  const newTime = prompt('Enter new time:', appointment.time);
-                                  if (newDate && newTime) {
-                                    handleAppointmentAction(appointment._id, 'reschedule', {
-                                      date: newDate,
-                                      time: newTime
-                                    });
-                                  }
-                                }}
-                                className="action-button reschedule"
-                              >
-                                <RefreshCw size={16} />
-                                Reschedule
-                              </button>
-                            </div>
-                          )}
-                        </div>
+            <div className="tab-content">
+              {activeTab === 'appointments' && (
+                <div className="appointments-tab">
+                  <div className="appointments-header">
+                    <div className="search-filters">
+                      <div className="search-box">
+                        <Search size={20} />
+                        <input
+                          type="text"
+                       
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="search-input"
+                        />
                       </div>
+                      <select 
+                        value={filterStatus} 
+                        onChange={(e) => setFilterStatus(e.target.value)}
+                        className="status-filter"
+                      >
+                        <option value="all">All Status</option>
+                        <option value="pending">Pending</option>
+                        <option value="accepted">Confirmed</option>
+                        <option value="rejected">Declined</option>
+                        <option value="rescheduled">Rescheduled</option>
+                      </select>
                     </div>
-                  ))}
-                  {!loading && filteredAppointments.length === 0 && (
-                    <div className="empty-state">
-                      {appointments.length === 0 ? (
-                        <>
-                          <Calendar size={48} />
-                          <h3>No appointments yet</h3>
-                          <p>New appointments will appear here when customers book through your business email.</p>
-                          <div className="booking-link-info">
-                            <h4>Customers can book using your business email:</h4>
-                            <div className="booking-link">
-                              <code>{salonInfo?.email}</code>
-                              <button
-                                onClick={() => {
-                                  navigator.clipboard.writeText(salonInfo?.email || '');
-                                  alert('Business email copied to clipboard!');
-                                }}
-                                className="copy-button"
-                              >
-                                Copy Email
-                              </button>
-                            </div>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <Search size={48} />
-                          <h3>No appointments found</h3>
-                          <p>Try adjusting your search term or filter criteria</p>
-                        </>
+                    <div className="header-actions">
+                      <button 
+                        className="refresh-btn" 
+                        onClick={loadAppointments} 
+                        disabled={loading}
+                      >
+                        <RefreshCw size={16} /> Refresh
+                      </button>
+                      {appointments.length > 0 && (
+                        <button className="export-btn" onClick={exportAppointments}>
+                          <Download size={16} /> Export
+                        </button>
                       )}
+                    </div>
+                  </div>
+
+                  {loading && appointments.length === 0 ? (
+                    <div className="loading-state">
+                      <RefreshCw size={32} className="loading-spinner" />
+                      <p>Loading appointments...</p>
+                    </div>
+                  ) : (
+                    <div className="appointments-list">
+                      <div className="appointments-grid">
+                        {filteredAppointments.length === 0 ? (
+                          <div className="empty-state">
+                            <Calendar size={48} />
+                            <h3>No appointments found</h3>
+                            <p>Your scheduled appointments will appear here</p>
+                          </div>
+                        ) : (
+                          filteredAppointments.map(appointment => (
+                            <div key={appointment._id} className="appointment-card">
+                              <div className="appointment-header">
+                                <div className="appointment-service">
+                                  <Building2 size={18} />
+                                  <span>{appointment.service}</span>
+                                </div>
+                                <span 
+                                  className="appointment-status"
+                                  style={{
+                                    backgroundColor: `${getStatusColor(appointment.status)}15`,
+                                    color: getStatusColor(appointment.status),
+                                    border: `1px solid ${getStatusColor(appointment.status)}30`
+                                  }}
+                                >
+                                  {appointment.status.charAt(0).toUpperCase() + appointment.status.slice(1)}
+                                </span>
+                              </div>
+                              <div className="appointment-details">
+                                <div className="detail-item">
+                                  <User size={16} />
+                                  <span>{appointment.customerName}</span>
+                                </div>
+                                <div className="detail-item">
+                                  <Calendar size={16} />
+                                  <span>{new Date(appointment.date).toLocaleDateString('en-US', {
+                                    weekday: 'long',
+                                    year: 'numeric',
+                                    month: 'long',
+                                    day: 'numeric'
+                                  })}</span>
+                                </div>
+                                <div className="detail-item">
+                                  <Clock size={16} />
+                                  <span>{appointment.time}</span>
+                                </div>
+                                {appointment.notes && (
+                                  <div className="detail-item">
+                                    <FileText size={16} />
+                                    <span>{appointment.notes}</span>
+                                  </div>
+                                )}
+                              </div>
+                              {/* Add this block to show action buttons for pending appointments */}
+                              {appointment.status === 'pending' && (
+                                <div className="appointment-actions">
+                                  <button
+                                    className="action-btn accept"
+                                    onClick={() => handleAppointmentAction(appointment._id, 'accept')}
+                                  >
+                                    <Check size={16} /> Accept
+                                  </button>
+                                  <button
+                                    className="action-btn reject"
+                                    onClick={() => handleAppointmentAction(appointment._id, 'reject')}
+                                  >
+                                    <X size={16} /> Reject
+                                  </button>
+                                  <button
+                                    className="action-btn reschedule"
+                                    onClick={() => {
+                                      const newDate = prompt('Enter new date (YYYY-MM-DD):', appointment.date);
+                                      const newTime = prompt('Enter new time:', appointment.time);
+                                      if (newDate && newTime) {
+                                        handleAppointmentAction(appointment._id, 'reschedule', { date: newDate, time: newTime });
+                                      }
+                                    }}
+                                  >
+                                    <RefreshCw size={16} /> Reschedule
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
-              </div>
-            )}
-
-            {activeTab === 'salon-info' && salonInfo && (
-              <div>
-                <div className="salon-info-grid">
+              )}
+              {activeTab === 'salon-info' && (
+                <div className="salon-info-tab">
                   <div className="info-section">
-                    <h3>Business Information</h3>
-                    <div className="form-group">
-                      <div className="form-field">
-                        <label>Salon Name</label>
-                        <p>{salonInfo.name}</p>
+                    <h3 className="section-title">Business Details</h3>
+                    <div className="info-grid">
+                      <div className="info-item">
+                        <strong>Salon Name:</strong> {salonInfo.name}
                       </div>
-                      <div className="form-field">
-                        <label>Business Email</label>
-                        <p>{salonInfo.email}</p>
-                        <small>This email is used for receiving appointment bookings</small>
+                      <div className="info-item">
+                        <strong>Business Email:</strong> {salonInfo.email}
                       </div>
-                      <div className="form-field">
-                        <label>Address</label>
-                        <p>{salonInfo.address}</p>
+                      <div className="info-item">
+                        <strong>Phone:</strong> {salonInfo.phone}
                       </div>
-                      <div className="form-row">
-                        <div className="form-field">
-                          <label>Phone</label>
-                          <p>{salonInfo.phone}</p>
-                        </div>
-                        <div className="form-field">
-                          <label>Working Hours</label>
-                          <p>{salonInfo.workingHours}</p>
-                        </div>
+                      <div className="info-item">
+                        <strong>Address:</strong> {salonInfo.address}
+                      </div>
+                      <div className="info-item">
+                        <strong>Working Hours:</strong> {salonInfo.workingHours}
                       </div>
                     </div>
                   </div>
-                  <div className="info-section">
-                    <h3>Services Offered</h3>
+
+                  <div className="services-section">
+                    <h3 className="section-title">Services Offered</h3>
                     <div className="services-grid">
-                      {salonInfo.services.map((service, index) => (
-                        <div key={index} className="service-item">
-                          <span>{service}</span>
-                          <CheckCircle size={16} style={{ color: '#10b981' }} />
+                      {salonInfo.services.map((service, i) => (
+                        <div key={i} className="service-item">
+                          <Scissors size={16} /> {service}
                         </div>
                       ))}
                     </div>
                     <button
-                      className="add-service-button"
+                      className="add-service-btn"
                       onClick={() => {
                         const newService = prompt('Enter new service name:');
                         if (newService && !salonInfo.services.includes(newService)) {
@@ -616,109 +527,77 @@ const SalonDashboard = () => {
                         }
                       }}
                     >
-                      <Plus size={16} />
-                      Add Service
+                      <Plus size={16} /> Add New Service
                     </button>
                   </div>
-                </div>
-                <div className="booking-info-section">
-                  <h3>Online Booking Instructions</h3>
-                  <p>Share these instructions with customers for booking appointments:</p>
-                  <div className="booking-instructions">
-                    <ol>
-                      <li>Go to our booking page</li>
-                      <li>Enter your business email: <strong>{salonInfo.email}</strong></li>
-                      <li>Select from available services</li>
-                      <li>Choose preferred date and time</li>
-                      <li>Submit the appointment request</li>
-                    </ol>
-                  </div>
-                </div>
-                <div className="alert info">
-                  <AlertCircle size={20} style={{ color: '#3b82f6' }} />
-                  <p>
-                    Appointments booked through your email ({salonInfo.email}) will appear in your dashboard automatically.
-                  </p>
-                </div>
-              </div>
-            )}
 
-            {activeTab === 'settings' && (
-              <div>
-                <div className="settings-grid">
-                  <div className="settings-section">
-                    <h3>Notification Settings</h3>
-                    <div className="settings-item">
-                      <div>
-                        <h4>Email Notifications</h4>
-                        <p>Receive emails for new appointments</p>
-                      </div>
-                      <input type="checkbox" defaultChecked className="settings-checkbox" />
-                    </div>
-                    <div className="settings-item">
-                      <div>
-                        <h4>Auto-refresh Dashboard</h4>
-                        <p>Automatically check for new appointments every 30 seconds</p>
-                      </div>
-                      <input type="checkbox" defaultChecked className="settings-checkbox" />
-                    </div>
-                    <div className="settings-item">
-                      <div>
-                        <h4>Sound Notifications</h4>
-                        <p>Play sound when new appointments arrive</p>
-                      </div>
-                      <input type="checkbox" className="settings-checkbox" />
+                  <div className="booking-section">
+                    <h3 className="section-title">Online Booking</h3>
+                    <p>Customers can book appointments using:</p>
+                    <div className="booking-info">
+                      <code className="booking-email">{salonInfo.email}</code>
+                      <button 
+                        className="copy-btn"
+                        onClick={() => navigator.clipboard.writeText(salonInfo.email)}
+                      >
+                        Copy
+                      </button>
                     </div>
                   </div>
+                </div>
+              )}
+              {activeTab === 'settings' && (
+                <div className="settings-tab">
                   <div className="settings-section">
-                    <h3>Data Management</h3>
-                    <div className="account-buttons">
-                      <button
-                        className="settings-button primary"
-                        onClick={() => alert('Profile editing feature coming soon!')}
-                      >
-                        <Edit2 size={16} />
-                        Edit Profile
+                    <h3 className="section-title">Notification Preferences</h3>
+                    <div className="settings-group">
+                      <label className="setting-item">
+                        <input type="checkbox" defaultChecked /> 
+                        <span>Email Notifications</span>
+                      </label>
+                      <label className="setting-item">
+                        <input type="checkbox" defaultChecked /> 
+                        <span>Auto-refresh Dashboard</span>
+                      </label>
+                      <label className="setting-item">
+                        <input type="checkbox" /> 
+                        <span>Sound Notifications</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="settings-section">
+                    <h3 className="section-title">Data Management</h3>
+                    <div className="settings-actions">
+                      <button className="setting-btn">
+                        <Edit2 size={16} /> Edit Profile
                       </button>
-                      <button
-                        className="settings-button secondary"
-                        onClick={loadAppointments}
-                      >
-                        <RefreshCw size={16} />
-                        Refresh Data
+                      <button className="setting-btn" onClick={loadAppointments}>
+                        <RefreshCw size={16} /> Refresh Data
                       </button>
-                      <button
-                        className="settings-button secondary"
-                        onClick={exportAppointments}
+                      <button 
+                        className="setting-btn" 
+                        onClick={exportAppointments} 
                         disabled={appointments.length === 0}
                       >
-                        <Download size={16} />
-                        Export All Data
+                        <Download size={16} /> Export All Data
                       </button>
                     </div>
                   </div>
-                </div>
-                <div className="alert info">
-                  <h4>Need Help?</h4>
-                  <p>
-                    Our support team is here to help you manage your appointment bookings effectively.
-                    Contact us for any technical issues or questions about using the dashboard.
-                  </p>
-                  <div className="help-buttons">
-                    <button
-                      className="help-button primary"
-                      onClick={() => alert('Opening support chat...')}
-                    >
-                      <Mail size={16} />
-                      Contact Support
+
+                  <div className="settings-section">
+                    <h3 className="section-title">Support</h3>
+                    <p>Need assistance with your salon dashboard?</p>
+                    <button className="support-btn">
+                      <Mail size={16} /> Contact Support
                     </button>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
-        </div>
-      </div>
+        </section>
+      </main>
     </div>
   );
 };

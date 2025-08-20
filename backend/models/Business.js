@@ -1,16 +1,20 @@
 const mongoose = require('mongoose');
 
 const BusinessSchema = new mongoose.Schema({
-  businessName: { type: String, required: true },
-  email: { type: String, required: true, unique: true },
-  address: String,
+  name: String,
+  email: { type: String, unique: true },
   phone: String,
-  services: [String], // This should be an array
+  address: String,
+  password: String,
+  role: String,
+  businessType: String,
+  businessName: String,
+  businessAddress: String,
+  services: [String],
   workingHours: String,
-  owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  businessType: { type: String, required: true },
   specialization: String,
-  status: { type: String, enum: ['active', 'inactive'], default: 'active' }
-}, { timestamps: true });
+  doctors: [String],
+  courses: [String]
+});
 
 module.exports = mongoose.model('Business', BusinessSchema);
