@@ -138,14 +138,15 @@ const SignupPage = () => {
         alert(res.data.message || `Account created successfully! Welcome ${role === 'customer' ? 'Customer' : 'Business Manager'}!`);
 
         if (role === 'manager' && businessType === 'salon') {
-          const salonName = processedBusinessData.businessName ? encodeURIComponent(processedBusinessData.businessName) : 'salon';
-          navigate(`/salon-dashboard/${salonName}`);
+          const businessEmail = encodeURIComponent(formData.email);
+          navigate(`/salon-dashboard/${businessEmail}`);
         } else if (role === 'manager' && businessType === 'consultancy') {
-          const consultantName = processedBusinessData.businessName ? encodeURIComponent(processedBusinessData.businessName) : 'consultant';
-          navigate(`/consultant-dashboard/${consultantName}`);
+          const businessEmail = encodeURIComponent(formData.email);
+          navigate(`/consultant-dashboard/${businessEmail}`);
         } else if (role === 'customer') {
           const customerName = userFormData.name ? encodeURIComponent(userFormData.name) : 'customer';
           navigate(`/customer-dashboard/${customerName}`);
+          
         } else {
           navigate('/login');
         }
