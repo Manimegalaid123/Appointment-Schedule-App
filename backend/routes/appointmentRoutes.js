@@ -50,4 +50,7 @@ router.post('/update-status/:id', async (req, res) => {
   }
 });
 
+// New route for fetching booked times
+router.get('/appointments/booked-times', appointmentController.getBookedTimes);
+
 module.exports = router;

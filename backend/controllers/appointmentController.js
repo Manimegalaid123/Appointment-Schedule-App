@@ -3,6 +3,18 @@ const Business = require('../models/Business');
 
 exports.createAppointment = async (req, res) => {
   try {
+    // Check for same business, same service, same date, same time
+    const exists = await Appointment.findOne({
+      businessEmail: req.body.businessEmail,
+      service: req.body.service,
+      date: req.body.date,
+      time: req.body.time
+    });
+    if (exists) {
+      // Don't create, just return success false (no error message for frontend)
+      return res.json({ success: false, message: 'Time slot already booked.' });
+    }
+
     const appointment = new Appointment(req.body);
     await appointment.save();
     res.json({ success: true, appointment });
@@ -46,4 +58,11 @@ exports.updateStatus = async (req, res) => {
   } catch (err) {
     res.status(500).json({ success: false, message: 'Server error' });
   }
+};
+
+exports.getBookedTimes = async (req, res) => {
+  const { businessEmail, service, date } = req.query;
+  const appointments = await Appointment.find({ businessEmail, service, date });
+  const bookedTimes = appointments.map(a => a.time);
+  res.json({ bookedTimes });
 };

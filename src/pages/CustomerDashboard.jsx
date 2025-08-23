@@ -36,6 +36,7 @@ const CustomerDashboard = () => {
   const [serviceError, setServiceError] = useState('');
   const [appointments, setAppointments] = useState([]);
   const [activeTab, setActiveTab] = useState('booking');
+  const [bookedTimes, setBookedTimes] = useState([]);
 
   useEffect(() => {
     const fetchCustomerName = async () => {
@@ -69,6 +70,21 @@ const CustomerDashboard = () => {
       customerName: customerName || ''
     }));
   }, [customerName]);
+
+  // Fetch booked times when businessEmail, service, or date changes
+  useEffect(() => {
+    if (formData.businessEmail && formData.service && formData.date) {
+      axios.get('http://localhost:5000/api/appointments/booked-times', {
+        params: {
+          businessEmail: formData.businessEmail,
+          service: formData.service,
+          date: formData.date
+        }
+      }).then(res => setBookedTimes(res.data.bookedTimes || []));
+    } else {
+      setBookedTimes([]);
+    }
+  }, [formData.businessEmail, formData.service, formData.date]);
 
   const handleInputChange = async (e) => {
     const { name, value } = e.target;
@@ -341,7 +357,14 @@ const CustomerDashboard = () => {
                   >
                     <option value="">Select time</option>
                     {timeSlots.map((slot, index) => (
-                      <option key={index} value={slot.value}>{slot.label}</option>
+                      <option
+                        key={index}
+                        value={slot.value}
+                        disabled={bookedTimes.includes(slot.value)}
+                        style={bookedTimes.includes(slot.value) ? { color: '#ccc' } : {}}
+                      >
+                        {slot.label}
+                      </option>
                     ))}
                   </select>
                 </div>
