@@ -8,17 +8,22 @@ exports.createAppointment = async (req, res) => {
       businessEmail: req.body.businessEmail,
       service: req.body.service,
       date: req.body.date,
-      time: req.body.time
+      time: req.body.time,
+      status: { $nin: ['rejected', 'cancelled'] } // Don't count rejected/cancelled appointments
     });
+    
     if (exists) {
-      // Don't create, just return success false (no error message for frontend)
-      return res.json({ success: false, message: 'Time slot already booked.' });
+      return res.status(409).json({ 
+        success: false, 
+        message: 'This time slot is already booked for this service.' 
+      });
     }
 
     const appointment = new Appointment(req.body);
     await appointment.save();
     res.json({ success: true, appointment });
   } catch (err) {
+    console.error('Error creating appointment:', err);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
@@ -48,7 +53,7 @@ exports.updateStatus = async (req, res) => {
   try {
     const appointment = await Appointment.findByIdAndUpdate(
       req.params.id,
-      { status: req.body.status },
+      { status: req.body.status, updatedAt: new Date() },
       { new: true }
     );
     if (!appointment) {
@@ -60,9 +65,30 @@ exports.updateStatus = async (req, res) => {
   }
 };
 
+// Fixed route for getting booked times
 exports.getBookedTimes = async (req, res) => {
-  const { businessEmail, service, date } = req.query;
-  const appointments = await Appointment.find({ businessEmail, service, date });
-  const bookedTimes = appointments.map(a => a.time);
-  res.json({ bookedTimes });
+  try {
+    const { businessEmail, service, date } = req.query;
+    
+    if (!businessEmail || !service || !date) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Missing required parameters' 
+      });
+    }
+
+    // Only get appointments that are not rejected or cancelled
+    const appointments = await Appointment.find({ 
+      businessEmail, 
+      service, 
+      date,
+      status: { $nin: ['rejected', 'cancelled'] }
+    });
+    
+    const bookedTimes = appointments.map(appointment => appointment.time);
+    res.json({ success: true, bookedTimes });
+  } catch (err) {
+    console.error('Error fetching booked times:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
 };

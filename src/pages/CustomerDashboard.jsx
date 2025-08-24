@@ -12,7 +12,9 @@ import {
   FileText,
   Building2,
   Loader2,
-  CalendarDays
+  CalendarDays,
+  AlertCircle,
+  Info
 } from 'lucide-react';
 import { businessAPI, appointmentAPI } from '../utils/api';
 import './CustomerDashboard.css';
@@ -37,6 +39,11 @@ const CustomerDashboard = () => {
   const [appointments, setAppointments] = useState([]);
   const [activeTab, setActiveTab] = useState('booking');
   const [bookedTimes, setBookedTimes] = useState([]);
+  const [bookingError, setBookingError] = useState('');
+  const [loadingBookedTimes, setLoadingBookedTimes] = useState(false);
+  const [workingHours, setWorkingHours] = useState({ start: '09:00', end: '19:00' });
+  const [businessName, setBusinessName] = useState('');
+  const [showWorkingHours, setShowWorkingHours] = useState(false);
 
   useEffect(() => {
     const fetchCustomerName = async () => {
@@ -73,77 +80,164 @@ const CustomerDashboard = () => {
 
   // Fetch booked times when businessEmail, service, or date changes
   useEffect(() => {
-    if (formData.businessEmail && formData.service && formData.date) {
-      axios.get('http://localhost:5000/api/appointments/booked-times', {
-        params: {
-          businessEmail: formData.businessEmail,
-          service: formData.service,
-          date: formData.date
+    const fetchBookedTimes = async () => {
+      if (formData.businessEmail && formData.service && formData.date) {
+        setLoadingBookedTimes(true);
+        try {
+          const response = await axios.get('http://localhost:5000/api/appointments/booked-times/check', {
+            params: {
+              businessEmail: formData.businessEmail,
+              service: formData.service,
+              date: formData.date
+            }
+          });
+          
+          if (response.data.success) {
+            setBookedTimes(response.data.bookedTimes || []);
+          } else {
+            setBookedTimes([]);
+          }
+        } catch (error) {
+          console.error('Error fetching booked times:', error);
+          setBookedTimes([]);
+        } finally {
+          setLoadingBookedTimes(false);
         }
-      }).then(res => setBookedTimes(res.data.bookedTimes || []));
-    } else {
-      setBookedTimes([]);
-    }
+      } else {
+        setBookedTimes([]);
+      }
+    };
+
+    fetchBookedTimes();
   }, [formData.businessEmail, formData.service, formData.date]);
 
   const handleInputChange = async (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+    setBookingError(''); // Clear any previous booking errors
 
     if (name === 'businessEmail' && /\S+@\S+\.\S+/.test(value)) {
       await fetchBusinessServices(value);
+    }
+
+    // Reset time selection when service or date changes
+    if (name === 'service' || name === 'date') {
+      setFormData(prev => ({ ...prev, time: '' }));
     }
   };
 
   const fetchBusinessServices = async (email) => {
     setServices([]);
     setServiceError('');
+    setBusinessName('');
+    setWorkingHours({ start: '09:00', end: '19:00' });
+    setShowWorkingHours(false);
+    
     if (!email) return;
+    
     try {
       const response = await businessAPI.getByEmail(email);
       if (response.success && response.business) {
-        setServices(response.business.services || []);
+        const business = response.business;
+        
+        // Set services
+        setServices(business.services || []);
+        
+        // Set business name
+        setBusinessName(business.businessName || business.name || 'Business');
+        
+        // Parse and set working hours
+        if (business.workingHours) {
+          const workingHoursStr = business.workingHours.trim();
+          console.log('Raw working hours:', workingHoursStr);
+          
+          // Handle different formats: "09:00 AM - 07:00 PM" or "9:00 AM - 7:00 PM"
+          if (workingHoursStr.includes(' - ')) {
+            const [startRaw, endRaw] = workingHoursStr.split(' - ');
+            const start = convertTo24Hour(startRaw.trim());
+            const end = convertTo24Hour(endRaw.trim());
+            
+            console.log('Converted working hours:', { start, end });
+            setWorkingHours({ start, end });
+            setShowWorkingHours(true);
+          } else {
+            // Default fallback
+            setWorkingHours({ start: '09:00', end: '19:00' });
+            setShowWorkingHours(false);
+          }
+        } else {
+          // No working hours set, use default
+          setWorkingHours({ start: '09:00', end: '19:00' });
+          setShowWorkingHours(false);
+        }
       } else {
         setServiceError('Business not found or error fetching services.');
         setServices([]);
+        setBusinessName('');
+        setWorkingHours({ start: '09:00', end: '19:00' });
+        setShowWorkingHours(false);
       }
     } catch (error) {
       setServiceError('Business not found or error fetching services.');
       setServices([]);
+      setBusinessName('');
+      setWorkingHours({ start: '09:00', end: '19:00' });
+      setShowWorkingHours(false);
+      console.error('Error fetching business:', error);
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
+    setBookingError('');
+    
     try {
-      await appointmentAPI.create({
+      const response = await appointmentAPI.create({
         ...formData,
         customerEmail,
         status: 'pending',
         createdAt: new Date().toISOString()
       });
-      setIsSuccess(true);
-      // Refresh appointments list
-      const response = await appointmentAPI.getAppointmentsByCustomer(customerEmail);
-      if (response.success) setAppointments(response.appointments);
-      
-      setTimeout(() => {
-        setFormData({
-          customerName: customerName || '',
-          customerPhone: '',
-          businessEmail: '',
-          service: '',
-          date: '',
-          time: '',
-          notes: ''
-        });
-        setIsSuccess(false);
-        setServices([]);
-        setServiceError('');
-      }, 3000);
+
+      if (response.data && response.data.success) {
+        setIsSuccess(true);
+        // Refresh appointments list
+        const appointmentsResponse = await appointmentAPI.getAppointmentsByCustomer(customerEmail);
+        if (appointmentsResponse.success) {
+          setAppointments(appointmentsResponse.appointments);
+        }
+        
+        setTimeout(() => {
+          setFormData({
+            customerName: customerName || '',
+            customerPhone: '',
+            businessEmail: '',
+            service: '',
+            date: '',
+            time: '',
+            notes: ''
+          });
+          setIsSuccess(false);
+          setServices([]);
+          setServiceError('');
+          setBookedTimes([]);
+          setBusinessName('');
+          setWorkingHours({ start: '09:00', end: '19:00' });
+          setShowWorkingHours(false);
+        }, 3000);
+      } else {
+        setBookingError(response.data?.message || 'Failed to book appointment. Please try again.');
+      }
     } catch (error) {
-      alert('Failed to submit appointment.');
+      console.error('Booking error:', error);
+      if (error.response && error.response.data && error.response.data.message) {
+        setBookingError(error.response.data.message);
+      } else if (error.response && error.response.status === 409) {
+        setBookingError('This time slot is already booked. Please select a different time.');
+      } else {
+        setBookingError('Failed to book appointment. Please try again.');
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -160,19 +254,94 @@ const CustomerDashboard = () => {
     );
   };
 
-  const timeSlots = Array.from({ length: 20 }, (_, i) => {
-    const hour = 9 + Math.floor(i / 2);
-    const minute = i % 2 === 0 ? '00' : '30';
-    const time = `${hour.toString().padStart(2, '0')}:${minute}`;
-    return {
-      value: time,
-      label: new Date(`2024-01-01T${time}`).toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true
-      })
-    };
-  });
+  // Helper function to convert 12-hour to 24-hour format
+  const convertTo24Hour = (timeStr) => {
+    try {
+      if (!timeStr || typeof timeStr !== 'string') return '09:00';
+      
+      // Remove extra spaces and handle different formats
+      const cleanTime = timeStr.trim().replace(/\s+/g, ' ');
+      
+      // If already in 24-hour format
+      if (!cleanTime.includes('AM') && !cleanTime.includes('PM')) {
+        // Validate format HH:MM
+        if (/^\d{1,2}:\d{2}$/.test(cleanTime)) {
+          const [h, m] = cleanTime.split(':');
+          const hour = parseInt(h, 10);
+          if (hour >= 0 && hour <= 23) {
+            return `${hour.toString().padStart(2, '0')}:${m}`;
+          }
+        }
+        return '09:00';
+      }
+      
+      // Handle 12-hour format
+      const [time, modifier] = cleanTime.split(' ');
+      if (!time || !modifier) return '09:00';
+      
+      let [hours, minutes] = time.split(':');
+      if (!hours || !minutes) return '09:00';
+      
+      hours = parseInt(hours, 10);
+      
+      if (isNaN(hours) || hours < 1 || hours > 12) return '09:00';
+      
+      if (modifier.toUpperCase() === 'PM' && hours !== 12) {
+        hours += 12;
+      }
+      if (modifier.toUpperCase() === 'AM' && hours === 12) {
+        hours = 0;
+      }
+      
+      return `${hours.toString().padStart(2, '0')}:${minutes}`;
+    } catch (error) {
+      console.error('Error converting time:', error);
+      return '09:00';
+    }
+  };
+
+  // Helper function to check if time is within working hours
+  const isWithinWorkingHours = (time, start, end) => {
+    try {
+      const toMinutes = (t) => {
+        const [h, m] = t.split(':').map(num => parseInt(num, 10));
+        return h * 60 + m;
+      };
+      
+      const timeMinutes = toMinutes(time);
+      const startMinutes = toMinutes(start);
+      const endMinutes = toMinutes(end);
+      
+      return timeMinutes >= startMinutes && timeMinutes <= endMinutes;
+    } catch (error) {
+      console.error('Error checking working hours:', error);
+      return true; // Default to true if there's an error
+    }
+  };
+
+  // Generate time slots (30-minute intervals from 6 AM to 11 PM)
+  const generateTimeSlots = () => {
+    const slots = [];
+    for (let hour = 6; hour <= 23; hour++) {
+      for (let minute = 0; minute < 60; minute += 30) {
+        const time = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+        const label = new Date(`2024-01-01T${time}`).toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        });
+        slots.push({ value: time, label });
+      }
+    }
+    return slots;
+  };
+
+  const allTimeSlots = generateTimeSlots();
+  
+  // Filter time slots based on working hours
+  const availableTimeSlots = allTimeSlots.filter(slot => 
+    isWithinWorkingHours(slot.value, workingHours.start, workingHours.end)
+  );
 
   const getTodayDate = () => new Date().toISOString().split('T')[0];
   const getMaxDate = () => {
@@ -187,6 +356,19 @@ const CustomerDashboard = () => {
       case 'rejected': return '#ef4444';
       case 'rescheduled': return '#3b82f6';
       default: return '#f59e0b';
+    }
+  };
+
+  // Convert 24-hour to 12-hour for display
+  const formatTimeFor12Hour = (time24) => {
+    try {
+      return new Date(`2024-01-01T${time24}`).toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      });
+    } catch (error) {
+      return time24;
     }
   };
 
@@ -206,7 +388,7 @@ const CustomerDashboard = () => {
             </div>
             <div className="success-item">
               <Clock size={16} />
-              <span>{formData.time}</span>
+              <span>{formatTimeFor12Hour(formData.time)}</span>
             </div>
             <div className="success-item">
               <Building2 size={16} />
@@ -254,6 +436,46 @@ const CustomerDashboard = () => {
               <h2>Book New Appointment</h2>
               <p>Fill in the details below to schedule your appointment</p>
             </div>
+
+            {/* Error Message */}
+            {bookingError && (
+              <div className="error-banner" style={{ 
+                backgroundColor: '#fee2e2', 
+                border: '1px solid #fecaca', 
+                color: '#dc2626', 
+                padding: '12px', 
+                borderRadius: '8px', 
+                marginBottom: '20px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <AlertCircle size={16} />
+                <span>{bookingError}</span>
+              </div>
+            )}
+
+            {/* Working Hours Info */}
+            {showWorkingHours && businessName && (
+              <div className="working-hours-info" style={{
+                backgroundColor: '#eff6ff',
+                border: '1px solid #bfdbfe',
+                color: '#1e40af',
+                padding: '12px',
+                borderRadius: '8px',
+                marginBottom: '20px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <Info size={16} />
+                <span>
+                  <strong>{businessName}</strong> is open from{' '}
+                  <strong>{formatTimeFor12Hour(workingHours.start)}</strong> to{' '}
+                  <strong>{formatTimeFor12Hour(workingHours.end)}</strong>
+                </span>
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="booking-form">
               <div className="customer-form-grid">
@@ -323,7 +545,7 @@ const CustomerDashboard = () => {
                       <option key={index} value={service}>{service}</option>
                     ))}
                   </select>
-                  {serviceError && <span className="error-message">{serviceError}</span>}
+                  {serviceError && <span className="error-message" style={{ color: '#dc2626', fontSize: '14px' }}>{serviceError}</span>}
                 </div>
 
                 <div className="customer-form-group">
@@ -347,26 +569,42 @@ const CustomerDashboard = () => {
                   <label>
                     <Clock size={16} />
                     Preferred Time *
+                    {loadingBookedTimes && <Loader2 size={12} className="spinner inline-spinner" />}
                   </label>
                   <select
                     name="time"
                     value={formData.time}
                     onChange={handleInputChange}
                     required
+                    disabled={loadingBookedTimes || availableTimeSlots.length === 0}
                     className="customer-form-select"
                   >
-                    <option value="">Select time</option>
-                    {timeSlots.map((slot, index) => (
-                      <option
-                        key={index}
-                        value={slot.value}
-                        disabled={bookedTimes.includes(slot.value)}
-                        style={bookedTimes.includes(slot.value) ? { color: '#ccc' } : {}}
-                      >
-                        {slot.label}
-                      </option>
-                    ))}
+                    <option value="">
+                      {loadingBookedTimes ? 'Loading available times...' : 
+                       availableTimeSlots.length === 0 ? 'No available times' : 'Select time'}
+                    </option>
+                    {availableTimeSlots.map((slot, index) => {
+                      const isBooked = bookedTimes.includes(slot.value);
+                      return (
+                        <option
+                          key={index}
+                          value={slot.value}
+                          disabled={isBooked}
+                          style={isBooked ? { 
+                            color: '#ccc',
+                            backgroundColor: '#f5f5f5'
+                          } : {}}
+                        >
+                          {slot.label} {isBooked ? '(Booked)' : ''}
+                        </option>
+                      );
+                    })}
                   </select>
+                  {availableTimeSlots.length > 0 && formData.service && formData.date && (
+                    <small className="availability-info" style={{ color: '#6b7280', fontSize: '12px' }}>
+                      {availableTimeSlots.length - bookedTimes.length} slots available out of {availableTimeSlots.length}
+                    </small>
+                  )}
                 </div>
 
                 <div className="customer-form-group customer-full-width">
@@ -460,7 +698,7 @@ const CustomerDashboard = () => {
                       </div>
                       <div className="detail-item">
                         <Clock size={16} />
-                        <span>{appointment.time}</span>
+                        <span>{formatTimeFor12Hour(appointment.time)}</span>
                       </div>
                       {appointment.notes && (
                         <div className="detail-item">

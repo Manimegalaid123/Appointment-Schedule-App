@@ -1,19 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const User = require('../models/User');
+const userController = require('../controllers/userController');
 
-router.get('/customer/:email', async (req, res) => {
-  const email = decodeURIComponent(req.params.email).trim();
-  try {
-    const user = await User.findOne({ email });
-    if (user) {
-      res.json({ success: true, name: user.name });
-    } else {
-      res.json({ success: false, message: 'User not found' });
-    }
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'Server Error' });
-  }
-});
+router.get('/customer/:email', userController.getCustomerByEmail);
 
 module.exports = router;
