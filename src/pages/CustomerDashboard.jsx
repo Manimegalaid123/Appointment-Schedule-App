@@ -45,6 +45,11 @@ const CustomerDashboard = () => {
   const [businessName, setBusinessName] = useState('');
   const [showWorkingHours, setShowWorkingHours] = useState(false);
 
+  // Add state for businesses and selected business
+  const [businesses, setBusinesses] = useState([]);
+  const [selectedBusiness, setSelectedBusiness] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
   useEffect(() => {
     const fetchCustomerName = async () => {
       try {
@@ -377,6 +382,11 @@ const CustomerDashboard = () => {
     }
   };
 
+  // Filter businesses by search
+  const filteredBusinesses = businesses.filter(biz =>
+    biz.businessName.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   if (isSuccess) {
     return (
       <div className="dashboard-container">
@@ -479,6 +489,133 @@ const CustomerDashboard = () => {
                   <strong>{formatTimeFor12Hour(workingHours.start)}</strong> to{' '}
                   <strong>{formatTimeFor12Hour(workingHours.end)}</strong>
                 </span>
+              </div>
+            )}
+
+            {/* Business Search and Selection */}
+            <div className="business-search-section" style={{ marginBottom: '20px' }}>
+              <input
+                type="text"
+                placeholder="Search salon name..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="business-search-input"
+                style={{
+                  padding: '10px',
+                  borderRadius: '8px',
+                  border: '1px solid #d1d5db',
+                  width: '100%',
+                  maxWidth: '600px',
+                  marginBottom: '12px'
+                }}
+              />
+              <ul className="business-list" style={{
+                listStyleType: 'none',
+                padding: 0,
+                margin: 0,
+                maxHeight: '200px',
+                overflowY: 'auto',
+                borderRadius: '8px',
+                border: '1px solid #d1d5db',
+                backgroundColor: '#fff'
+              }}>
+                {filteredBusinesses.map(biz => (
+                  <li key={biz.email} className="business-list-item" style={{
+                    padding: '10px',
+                    borderBottom: '1px solid #f1f5f9',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}>
+                    <div style={{ flex: 1 }}>
+                      <strong>{biz.businessName}</strong> ({biz.businessAddress})
+                    </div>
+                    <button 
+                      onClick={() => setSelectedBusiness(biz)}
+                      style={{
+                        backgroundColor: '#3b82f6',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '8px',
+                        padding: '8px 12px',
+                        cursor: 'pointer',
+                        fontSize: '14px'
+                      }}
+                    >
+                      View Details
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {selectedBusiness && (
+              <div className="selected-business-info" style={{
+                backgroundColor: '#f0f9ff',
+                border: '1px solid #bfdbfe',
+                borderRadius: '8px',
+                padding: '16px',
+                marginBottom: '20px'
+              }}>
+                <h3 style={{ margin: 0, fontSize: '18px' }}>{selectedBusiness.businessName}</h3>
+                <p style={{ margin: '4px 0', color: '#6b7280' }}>{selectedBusiness.businessAddress}</p>
+                <div className="business-details-grid" style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+                  gap: '12px',
+                  marginTop: '12px'
+                }}>
+                  <div className="business-detail-item" style={{
+                    backgroundColor: '#fff',
+                    borderRadius: '8px',
+                    padding: '12px',
+                    border: '1px solid #d1d5db',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    <MapPin size={16} />
+                    <span style={{ fontSize: '14px' }}>{selectedBusiness.businessLocation}</span>
+                  </div>
+                  <div className="business-detail-item" style={{
+                    backgroundColor: '#fff',
+                    borderRadius: '8px',
+                    padding: '12px',
+                    border: '1px solid #d1d5db',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    <Clock size={16} />
+                    <span style={{ fontSize: '14px' }}>
+                      {workingHours.start} - {workingHours.end}
+                    </span>
+                  </div>
+                  <div className="business-detail-item" style={{
+                    backgroundColor: '#fff',
+                    borderRadius: '8px',
+                    padding: '12px',
+                    border: '1px solid #d1d5db',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    <Mail size={16} />
+                    <span style={{ fontSize: '14px' }}>{selectedBusiness.email}</span>
+                  </div>
+                  <div className="business-detail-item" style={{
+                    backgroundColor: '#fff',
+                    borderRadius: '8px',
+                    padding: '12px',
+                    border: '1px solid #d1d5db',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    <Phone size={16} />
+                    <span style={{ fontSize: '14px' }}>{selectedBusiness.phone}</span>
+                  </div>
+                </div>
               </div>
             )}
 
