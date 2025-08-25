@@ -132,44 +132,49 @@ const CustomerDashboard = () => {
     setBusinessName('');
     setWorkingHours({ start: '09:00', end: '19:00' });
     setShowWorkingHours(false);
-    
+
     if (!email) return;
-    
+
     try {
       const response = await businessAPI.getByEmail(email);
       if (response.success && response.business) {
         const business = response.business;
-        
+
         // Set services
         setServices(business.services || []);
-        
+
         // Set business name
         setBusinessName(business.businessName || business.name || 'Business');
-        
-        // Parse and set working hours
+
+        // --- Paste here: normalize and parse working hours ---
+        const normalizeTimeString = (str) => {
+          // Add space before AM/PM if missing
+          return str.replace(/([0-9])([AP]M)/gi, '$1 $2');
+        };
+
         if (business.workingHours) {
           const workingHoursStr = business.workingHours.trim();
           console.log('Raw working hours:', workingHoursStr);
-          
-          // Handle different formats: "09:00 AM - 07:00 PM" or "9:00 AM - 7:00 PM"
-          if (workingHoursStr.includes(' - ')) {
-            const [startRaw, endRaw] = workingHoursStr.split(' - ');
-            const start = convertTo24Hour(startRaw.trim());
-            const end = convertTo24Hour(endRaw.trim());
-            
+
+          if (workingHoursStr.includes('-')) {
+            const [startRaw, endRaw] = workingHoursStr.split('-');
+            const startNorm = normalizeTimeString(startRaw.trim());
+            const endNorm = normalizeTimeString(endRaw.trim());
+            const start = convertTo24Hour(startNorm);
+            const end = convertTo24Hour(endNorm);
+
             console.log('Converted working hours:', { start, end });
             setWorkingHours({ start, end });
             setShowWorkingHours(true);
           } else {
-            // Default fallback
             setWorkingHours({ start: '09:00', end: '19:00' });
             setShowWorkingHours(false);
           }
         } else {
-          // No working hours set, use default
           setWorkingHours({ start: '09:00', end: '19:00' });
           setShowWorkingHours(false);
         }
+        // --- End paste ---
       } else {
         setServiceError('Business not found or error fetching services.');
         setServices([]);
