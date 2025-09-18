@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { businessAPI, appointmentAPI } from '../utils/api';
 import './CustomerDashboard.css';
+import { useNavigate } from 'react-router-dom';
 
 const CustomerDashboard = () => {
   const customerEmail = localStorage.getItem('email');
@@ -48,7 +49,10 @@ const CustomerDashboard = () => {
   // Add state for businesses and selected business
   const [businesses, setBusinesses] = useState([]);
   const [selectedBusiness, setSelectedBusiness] = useState(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedType, setSelectedType] = useState('');
+  // const [searchQuery, setSearchQuery] = useState('');
+
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchCustomerName = async () => {
@@ -382,10 +386,22 @@ const CustomerDashboard = () => {
     }
   };
 
-  // Filter businesses by search
-  const filteredBusinesses = businesses.filter(biz =>
-    biz.businessName.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  useEffect(() => {
+    if (!selectedType) {
+      setBusinesses([]);
+      return;
+    }
+    const fetchBusinesses = async () => {
+      try {
+        const response = await axios.get(`http://localhost:5000/api/businesses?type=${selectedType}`);
+        if (response.data.success) setBusinesses(response.data.businesses);
+        else setBusinesses([]);
+      } catch (error) {
+        setBusinesses([]);
+      }
+    };
+    fetchBusinesses();
+  }, [selectedType]);
 
   if (isSuccess) {
     return (
@@ -492,63 +508,35 @@ const CustomerDashboard = () => {
               </div>
             )}
 
-            {/* Business Search and Selection */}
-            <div className="business-search-section" style={{ marginBottom: '20px' }}>
-              <input
-                type="text"
-                placeholder="Search salon name..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="business-search-input"
-                style={{
-                  padding: '10px',
-                  borderRadius: '8px',
-                  border: '1px solid #d1d5db',
-                  width: '100%',
-                  maxWidth: '600px',
-                  marginBottom: '12px'
-                }}
-              />
-              <ul className="business-list" style={{
-                listStyleType: 'none',
-                padding: 0,
-                margin: 0,
-                maxHeight: '200px',
-                overflowY: 'auto',
-                borderRadius: '8px',
-                border: '1px solid #d1d5db',
-                backgroundColor: '#fff'
-              }}>
-                {filteredBusinesses.map(biz => (
-                  <li key={biz.email} className="business-list-item" style={{
-                    padding: '10px',
-                    borderBottom: '1px solid #f1f5f9',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                  }}>
-                    <div style={{ flex: 1 }}>
-                      <strong>{biz.businessName}</strong> ({biz.businessAddress})
-                    </div>
-                    <button 
-                      onClick={() => setSelectedBusiness(biz)}
-                      style={{
-                        backgroundColor: '#3b82f6',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '8px',
-                        padding: '8px 12px',
-                        cursor: 'pointer',
-                        fontSize: '14px'
-                      }}
-                    >
-                      View Details
-                    </button>
-                  </li>
-                ))}
-              </ul>
+            {/* Business Type Selection */}
+            <div style={{ marginBottom: '20px' }}>
+              <label>
+                Choose Business Type:&nbsp;
+                <select value={selectedType} onChange={e => setSelectedType(e.target.value)}>
+                  <option value="">-- Select --</option>
+                  <option value="salon">Salon</option>
+                  <option value="doctor">Doctor</option>
+                  <option value="consultant">Consultant</option>
+                  {/* Add more types as needed */}
+                </select>
+              </label>
             </div>
 
+            {/* Show businesses as cards for selected type */}
+            {selectedType && (
+              <div>
+                {businesses.length === 0 && <p>No businesses found for this type.</p>}
+                {businesses.map(biz => (
+                  <div key={biz._id} className="shop-card" style={{ border: '1px solid #eee', padding: 16, marginBottom: 12, borderRadius: 8 }}>
+                    <h3>{biz.businessName}</h3>
+                    <p>{biz.businessAddress}</p>
+                    <button onClick={() => navigate(`/salon/${biz._id}`)}>View Details</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Show selected business details and booking form */}
             {selectedBusiness && (
               <div className="selected-business-info" style={{
                 backgroundColor: '#f0f9ff',
@@ -559,230 +547,171 @@ const CustomerDashboard = () => {
               }}>
                 <h3 style={{ margin: 0, fontSize: '18px' }}>{selectedBusiness.businessName}</h3>
                 <p style={{ margin: '4px 0', color: '#6b7280' }}>{selectedBusiness.businessAddress}</p>
-                <div className="business-details-grid" style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
-                  gap: '12px',
-                  marginTop: '12px'
-                }}>
-                  <div className="business-detail-item" style={{
-                    backgroundColor: '#fff',
-                    borderRadius: '8px',
-                    padding: '12px',
-                    border: '1px solid #d1d5db',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px'
-                  }}>
-                    <MapPin size={16} />
-                    <span style={{ fontSize: '14px' }}>{selectedBusiness.businessLocation}</span>
+                {/* Add more business details here if needed */}
+                <button onClick={() => setSelectedBusiness(null)} style={{ marginBottom: 16 }}>Back to List</button>
+                {/* Booking form below */}
+                <form onSubmit={handleSubmit} className="booking-form">
+                  <div className="customer-form-grid">
+                    <div className="customer-form-group">
+                      <label>
+                        <User size={16} />
+                        Full Name *
+                      </label>
+                      <input
+                        type="text"
+                        name="customerName"
+                        value={formData.customerName}
+                        onChange={handleInputChange}
+                        required
+                        placeholder="Enter your full name"
+                        className="customer-form-input"
+                      />
+                    </div>
+
+                    <div className="customer-form-group">
+                      <label>
+                        <Phone size={16} />
+                        Phone Number *
+                      </label>
+                      <input 
+                        type="tel" 
+                        name="customerPhone" 
+                        value={formData.customerPhone} 
+                        onChange={handleInputChange} 
+                        required 
+                        placeholder="+1 (555) 123-4567"
+                        className="customer-form-input"
+                      />
+                    </div>
+
+                    <div className="customer-form-group customer-full-width">
+                      <label>
+                        <Mail size={16} />
+                        Business Email *
+                      </label>
+                      <input 
+                        type="email" 
+                        name="businessEmail" 
+                        value={formData.businessEmail} 
+                        onChange={handleInputChange} 
+                        required 
+                        placeholder="business@example.com"
+                        className="customer-form-input"
+                      />
+                    </div>
+
+                    <div className="customer-form-group customer-full-width">
+                      <label>
+                        <Building2 size={16} />
+                        Service *
+                      </label>
+                      <select
+                        name="service"
+                        value={formData.service}
+                        onChange={handleInputChange}
+                        required
+                        disabled={services.length === 0}
+                        className="customer-form-select"
+                      >
+                        <option value="">Select a service</option>
+                        {services.map((service, index) => (
+                          <option key={index} value={service}>{service}</option>
+                        ))}
+                      </select>
+                      {serviceError && <span className="error-message" style={{ color: '#dc2626', fontSize: '14px' }}>{serviceError}</span>}
+                    </div>
+
+                    <div className="customer-form-group">
+                      <label>
+                        <Calendar size={16} />
+                        Preferred Date *
+                      </label>
+                      <input 
+                        type="date" 
+                        name="date" 
+                        value={formData.date} 
+                        onChange={handleInputChange} 
+                        min={getTodayDate()} 
+                        max={getMaxDate()} 
+                        required
+                        className="customer-form-input"
+                      />
+                    </div>
+
+                    <div className="customer-form-group">
+                      <label>
+                        <Clock size={16} />
+                        Preferred Time *
+                        {loadingBookedTimes && <Loader2 size={12} className="spinner inline-spinner" />}
+                      </label>
+                      <select
+                        name="time"
+                        value={formData.time}
+                        onChange={handleInputChange}
+                        required
+                        disabled={loadingBookedTimes || availableTimeSlots.length === 0}
+                        className="customer-form-select"
+                      >
+                        <option value="">
+                          {loadingBookedTimes ? 'Loading available times...' : 
+                           availableTimeSlots.length === 0 ? 'No available times' : 'Select time'}
+                        </option>
+                        {availableTimeSlots.map((slot, index) => {
+                          const isBooked = bookedTimes.includes(slot.value);
+                          return (
+                            <option
+                              key={index}
+                              value={slot.value}
+                              disabled={isBooked}
+                              style={isBooked ? { 
+                                color: '#ccc',
+                                backgroundColor: '#f5f5f5'
+                              } : {}}
+                            >
+                              {slot.label} {isBooked ? '(Booked)' : ''}
+                            </option>
+                          );
+                        })}
+                      </select>
+                      {availableTimeSlots.length > 0 && formData.service && formData.date && (
+                        <small className="availability-info" style={{ color: '#6b7280', fontSize: '12px' }}>
+                          {availableTimeSlots.length - bookedTimes.length} slots available out of {availableTimeSlots.length}
+                        </small>
+                      )}
+                    </div>
+
+                    <div className="customer-form-group customer-full-width">
+                      <label>
+                        <FileText size={16} />
+                        Additional Notes
+                      </label>
+                      <textarea 
+                        name="notes"
+                        value={formData.notes}
+                        onChange={handleInputChange}
+                        placeholder="Any additional information or requests"
+                        className="customer-form-textarea"
+                      />
+                    </div>
+
+                    <div className="customer-form-group customer-full-width">
+                      <button 
+                        type="submit" 
+                        className="submit-button"
+                        disabled={isSubmitting || !isFormValid()}
+                        style={{ 
+                          backgroundColor: isSubmitting ? '#d1fae5' : '#10b981',
+                          color: isSubmitting ? '#6b7280' : '#fff',
+                          cursor: isSubmitting ? 'not-allowed' : 'pointer'
+                        }}
+                      >
+                        {isSubmitting ? <Loader2 size={16} className="spinner" /> : 'Book Appointment'}
+                      </button>
+                    </div>
                   </div>
-                  <div className="business-detail-item" style={{
-                    backgroundColor: '#fff',
-                    borderRadius: '8px',
-                    padding: '12px',
-                    border: '1px solid #d1d5db',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px'
-                  }}>
-                    <Clock size={16} />
-                    <span style={{ fontSize: '14px' }}>
-                      {workingHours.start} - {workingHours.end}
-                    </span>
-                  </div>
-                  <div className="business-detail-item" style={{
-                    backgroundColor: '#fff',
-                    borderRadius: '8px',
-                    padding: '12px',
-                    border: '1px solid #d1d5db',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px'
-                  }}>
-                    <Mail size={16} />
-                    <span style={{ fontSize: '14px' }}>{selectedBusiness.email}</span>
-                  </div>
-                  <div className="business-detail-item" style={{
-                    backgroundColor: '#fff',
-                    borderRadius: '8px',
-                    padding: '12px',
-                    border: '1px solid #d1d5db',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px'
-                  }}>
-                    <Phone size={16} />
-                    <span style={{ fontSize: '14px' }}>{selectedBusiness.phone}</span>
-                  </div>
-                </div>
+                </form>
               </div>
             )}
-
-            <form onSubmit={handleSubmit} className="booking-form">
-              <div className="customer-form-grid">
-                <div className="customer-form-group">
-                  <label>
-                    <User size={16} />
-                    Full Name *
-                  </label>
-                  <input
-                    type="text"
-                    name="customerName"
-                    value={formData.customerName}
-                    onChange={handleInputChange}
-                    required
-                    placeholder="Enter your full name"
-                    className="customer-form-input"
-                  />
-                </div>
-
-                <div className="customer-form-group">
-                  <label>
-                    <Phone size={16} />
-                    Phone Number *
-                  </label>
-                  <input 
-                    type="tel" 
-                    name="customerPhone" 
-                    value={formData.customerPhone} 
-                    onChange={handleInputChange} 
-                    required 
-                    placeholder="+1 (555) 123-4567"
-                    className="customer-form-input"
-                  />
-                </div>
-
-                <div className="customer-form-group customer-full-width">
-                  <label>
-                    <Mail size={16} />
-                    Business Email *
-                  </label>
-                  <input 
-                    type="email" 
-                    name="businessEmail" 
-                    value={formData.businessEmail} 
-                    onChange={handleInputChange} 
-                    required 
-                    placeholder="business@example.com"
-                    className="customer-form-input"
-                  />
-                </div>
-
-                <div className="customer-form-group customer-full-width">
-                  <label>
-                    <Building2 size={16} />
-                    Service *
-                  </label>
-                  <select
-                    name="service"
-                    value={formData.service}
-                    onChange={handleInputChange}
-                    required
-                    disabled={services.length === 0}
-                    className="customer-form-select"
-                  >
-                    <option value="">Select a service</option>
-                    {services.map((service, index) => (
-                      <option key={index} value={service}>{service}</option>
-                    ))}
-                  </select>
-                  {serviceError && <span className="error-message" style={{ color: '#dc2626', fontSize: '14px' }}>{serviceError}</span>}
-                </div>
-
-                <div className="customer-form-group">
-                  <label>
-                    <Calendar size={16} />
-                    Preferred Date *
-                  </label>
-                  <input 
-                    type="date" 
-                    name="date" 
-                    value={formData.date} 
-                    onChange={handleInputChange} 
-                    min={getTodayDate()} 
-                    max={getMaxDate()} 
-                    required
-                    className="customer-form-input"
-                  />
-                </div>
-
-                <div className="customer-form-group">
-                  <label>
-                    <Clock size={16} />
-                    Preferred Time *
-                    {loadingBookedTimes && <Loader2 size={12} className="spinner inline-spinner" />}
-                  </label>
-                  <select
-                    name="time"
-                    value={formData.time}
-                    onChange={handleInputChange}
-                    required
-                    disabled={loadingBookedTimes || availableTimeSlots.length === 0}
-                    className="customer-form-select"
-                  >
-                    <option value="">
-                      {loadingBookedTimes ? 'Loading available times...' : 
-                       availableTimeSlots.length === 0 ? 'No available times' : 'Select time'}
-                    </option>
-                    {availableTimeSlots.map((slot, index) => {
-                      const isBooked = bookedTimes.includes(slot.value);
-                      return (
-                        <option
-                          key={index}
-                          value={slot.value}
-                          disabled={isBooked}
-                          style={isBooked ? { 
-                            color: '#ccc',
-                            backgroundColor: '#f5f5f5'
-                          } : {}}
-                        >
-                          {slot.label} {isBooked ? '(Booked)' : ''}
-                        </option>
-                      );
-                    })}
-                  </select>
-                  {availableTimeSlots.length > 0 && formData.service && formData.date && (
-                    <small className="availability-info" style={{ color: '#6b7280', fontSize: '12px' }}>
-                      {availableTimeSlots.length - bookedTimes.length} slots available out of {availableTimeSlots.length}
-                    </small>
-                  )}
-                </div>
-
-                <div className="customer-form-group customer-full-width">
-                  <label>
-                    <FileText size={16} />
-                    Additional Notes
-                  </label>
-                  <textarea 
-                    name="notes" 
-                    value={formData.notes} 
-                    onChange={handleInputChange} 
-                    rows="3" 
-                    placeholder="Any special requests or requirements..."
-                    className="customer-form-textarea"
-                  />
-                </div>
-              </div>
-
-              <button 
-                type="submit" 
-                disabled={!isFormValid() || isSubmitting} 
-                className="submit-button"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 size={16} className="spinner" />
-                    Booking Appointment...
-                  </>
-                ) : (
-                  <>
-                    <Send size={16} />
-                    Book Appointment
-                  </>
-                )}
-              </button>
-            </form>
           </div>
         )}
 
@@ -790,69 +719,140 @@ const CustomerDashboard = () => {
           <div className="appointments-content">
             <div className="content-header">
               <h2>My Appointments</h2>
-              <p>Track your upcoming and past appointments</p>
+              <p>View and manage your upcoming appointments</p>
             </div>
 
-            <div className="appointments-grid">
-              {appointments.length === 0 ? (
-                <div className="empty-state">
-                  <Calendar size={48} />
-                  <h3>No appointments found</h3>
-                  <p>Your scheduled appointments will appear here</p>
-                </div>
-              ) : (
-                appointments.map(appointment => (
-                  <div key={appointment._id} className="appointment-card">
-                    <div className="appointment-header">
-                      <div className="appointment-service">
-                        <Building2 size={18} />
-                        <span>{appointment.service}</span>
-                      </div>
-                      <span 
-                        className="appointment-status"
-                        style={{
-                          backgroundColor: `${getStatusColor(appointment.status)}15`,
+            {appointments.length === 0 ? (
+              <div className="no-appointments" style={{ 
+                backgroundColor: '#f9fafb', 
+                border: '1px solid #e5e7eb', 
+                borderRadius: '8px', 
+                padding: '16px',
+                textAlign: 'center'
+              }}>
+                <p style={{ color: '#6b7280' }}>You have no upcoming appointments.</p>
+                <Link to="/book" className="book-now-button" style={{ 
+                  display: 'inline-block', 
+                  marginTop: '12px', 
+                  padding: '10px 20px', 
+                  backgroundColor: '#10b981', 
+                  color: '#fff', 
+                  borderRadius: '8px',
+                  textDecoration: 'none'
+                }}>
+                  Book Now
+                </Link>
+              </div>
+            ) : (
+              <div className="appointments-list">
+                {appointments.map(appointment => (
+                  <div key={appointment._id} className="appointment-card" style={{ 
+                    backgroundColor: '#fff', 
+                    border: '1px solid #e5e7eb', 
+                    borderRadius: '8px', 
+                    padding: '16px',
+                    marginBottom: '12px',
+                    position: 'relative'
+                  }}>
+                    <div className="appointment-details" style={{ 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      gap: '8px'
+                    }}>
+                      <div className="appointment-header" style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center'
+                      }}>
+                        <h3 style={{ 
+                          margin: 0, 
+                          fontSize: '16px', 
+                          color: '#111827'
+                        }}>
+                          {appointment.service}
+                        </h3>
+                        <span style={{ 
+                          fontSize: '14px', 
                           color: getStatusColor(appointment.status),
-                          border: `1px solid ${getStatusColor(appointment.status)}30`
-                        }}
-                      >
-                        {appointment.status.charAt(0).toUpperCase() + appointment.status.slice(1)}
-                      </span>
-                    </div>
-
-                    <div className="appointment-details">
-                      <div className="detail-item">
-                        <User size={16} />
-                        <span>{appointment.customerName}</span>
-                      </div>
-                      <div className="detail-item">
-                        <Calendar size={16} />
-                        <span>
-                          {appointment.date
-                            ? new Date(appointment.date).toLocaleDateString('en-US', {
-                                weekday: 'long',
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric'
-                              })
-                            : 'No date'}
+                          fontWeight: '500'
+                        }}>
+                          {appointment.status.charAt(0).toUpperCase() + appointment.status.slice(1)}
                         </span>
                       </div>
-                      <div className="detail-item">
-                        <Clock size={16} />
-                        <span>{formatTimeFor12Hour(appointment.time)}</span>
-                      </div>
-                      {appointment.notes && (
-                        <div className="detail-item">
-                          <FileText size={16} />
-                          <span>{appointment.notes}</span>
+                      <div className="appointment-time" style={{ 
+                        display: 'flex', 
+                        gap: '8px',
+                        fontSize: '14px',
+                        color: '#6b7280'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Calendar size={16} />
+                          <span>{new Date(appointment.date).toLocaleDateString()}</span>
                         </div>
-                      )}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Clock size={16} />
+                          <span>{formatTimeFor12Hour(appointment.time)}</span>
+                        </div>
+                      </div>
+                      <div className="appointment-business" style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '8px',
+                        fontSize: '14px',
+                        color: '#374151'
+                      }}>
+                        <Building2 size={16} />
+                        <span>{appointment.businessName}</span>
+                      </div>
+                    </div>
+
+                    <div className="appointment-actions" style={{ 
+                      display: 'flex', 
+                      justifyContent: 'flex-end', 
+                      gap: '8px',
+                      marginTop: '12px'
+                    }}>
+                      <button 
+                        onClick={() => handleReschedule(appointment._id, appointment.date, appointment.time)}
+                        className="reschedule-button"
+                        style={{ 
+                          backgroundColor: '#3b82f6', 
+                          color: '#fff', 
+                          padding: '8px 16px', 
+                          borderRadius: '8px',
+                          border: 'none',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        <Clock size={16} />
+                        Reschedule
+                      </button>
+                      <button 
+                        onClick={() => handleCancel(appointment._id)}
+                        className="cancel-button"
+                        style={{ 
+                          backgroundColor: '#ef4444', 
+                          color: '#fff', 
+                          padding: '8px 16px', 
+                          borderRadius: '8px',
+                          border: 'none',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        <Trash size={16} />
+                        Cancel
+                      </button>
                     </div>
                   </div>
-                ))
-              )}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

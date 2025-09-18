@@ -6,6 +6,7 @@ import HomePage from "./pages/HomePage";
 import SalonDashboard from "./pages/SalonDashboard";
 import ConsultantDashboard from "./pages/ConsultantDashboard";
 import CustomerDashboard from "./pages/CustomerDashboard";
+import SalonDetails from "./pages/SalonDetails";
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
         <Route path="/salon-dashboard/:businessEmail" element={<SalonDashboard />} />
         <Route path="/consultant-dashboard/:consultantEmail" element={<ConsultantDashboard />} />
         <Route path="/customer-dashboard/:customerName" element={<CustomerDashboard />} />
+        <Route path="/salon/:id" element={<SalonDetails />} />
       </Routes>
     </Router>
   );

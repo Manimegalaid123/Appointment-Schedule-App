@@ -55,4 +55,32 @@ router.post('/update-status/:id', async (req, res) => {
 // FIXED: Get booked times - moved to correct path
 router.get('/booked-times/check', appointmentController.getBookedTimes);
 
+// CREATE: New endpoint to create appointment with business logic
+router.post('/create', async (req, res) => {
+  const { businessEmail, service, date, time, customerName, customerEmail, notes } = req.body;
+  if (!businessEmail || !service || !date || !time || !customerName || !customerEmail) {
+    return res.status(400).json({ message: 'Missing required fields' });
+  }
+  try {
+    const existing = await Appointment.findOne({ businessEmail, service, date, time });
+    if (existing) {
+      return res.status(409).json({ message: 'This time slot is already booked.' });
+    }
+    const appointment = new Appointment({
+      businessEmail,
+      service,
+      date,
+      time,
+      customerName,
+      customerEmail,
+      notes
+    });
+    await appointment.save();
+    res.json({ success: true, appointment });
+  } catch (err) {
+    console.error('Appointment creation error:', err); // <-- This will print the real error
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 module.exports = router;

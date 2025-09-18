@@ -145,4 +145,22 @@ router.post('/business/email/:email/add-service', async (req, res) => {
   }
 });
 
+router.post('/services/rate', async (req, res) => {
+  const { businessId, serviceName, rating } = req.body;
+  if (!businessId || !serviceName || !rating) {
+    return res.status(400).json({ success: false, message: 'Missing fields' });
+  }
+  const business = await Business.findById(businessId);
+  if (!business) return res.status(404).json({ success: false, message: 'Business not found' });
+
+  // Find the service and update/add rating (simple average for demo)
+  const service = business.services.find(s => s.name === serviceName);
+  if (!service) return res.status(404).json({ success: false, message: 'Service not found' });
+
+  // For demo: just overwrite rating, or you can keep an array of ratings for average
+  service.rating = rating;
+  await business.save();
+  res.json({ success: true, service });
+});
+
 module.exports = router;
