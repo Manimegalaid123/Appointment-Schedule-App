@@ -427,7 +427,7 @@ const SalonDashboard = () => {
                               <div className="appointment-details">
                                 <div className="detail-item">
                                   <User size={16} />
-                                  <span>{appointment.customerName}</span>
+                                  <span>{appointment.customerName || appointment.customerEmail || 'Customer'}</span>
                                 </div>
                                 <div className="detail-item">
                                   <Calendar size={16} />

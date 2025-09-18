@@ -21,8 +21,8 @@ import './CustomerDashboard.css';
 import { useNavigate } from 'react-router-dom';
 
 const CustomerDashboard = () => {
+  const customerName = localStorage.getItem('name');
   const customerEmail = localStorage.getItem('email');
-  const [customerName, setCustomerName] = useState('');
   const [formData, setFormData] = useState({
     customerName: customerName || '',
     customerPhone: '',
@@ -51,6 +51,9 @@ const CustomerDashboard = () => {
   const [selectedBusiness, setSelectedBusiness] = useState(null);
   const [selectedType, setSelectedType] = useState('');
   // const [searchQuery, setSearchQuery] = useState('');
+
+  const [ratingModal, setRatingModal] = useState(null);
+  const [userRating, setUserRating] = useState(0);
 
   const navigate = useNavigate();
 
@@ -257,6 +260,27 @@ const CustomerDashboard = () => {
     }
   };
 
+  const handleRatingSubmit = async () => {
+    if (userRating < 1 || userRating > 5) return;
+
+    try {
+      const response = await appointmentAPI.rateAppointment(ratingModal._id, userRating);
+      if (response.success) {
+        setAppointments(prev => 
+          prev.map(appointment => 
+            appointment._id === ratingModal._id ? { ...appointment, rating: userRating } : appointment
+          )
+        );
+        setRatingModal(null);
+        setUserRating(0);
+      } else {
+        console.error('Failed to submit rating:', response.message);
+      }
+    } catch (error) {
+      console.error('Error submitting rating:', error);
+    }
+  };
+
   const isFormValid = () => {
     return (
       formData.customerName &&
@@ -436,7 +460,7 @@ const CustomerDashboard = () => {
       {/* Header */}
       <div className="dashboard-header">
         <div className="welcome-section">
-          <h1>Welcome back, {customerName || 'Customer'}</h1>
+          <h1>Welcome, {customerName || 'Customer'}</h1>
           <p>Manage your appointments with ease</p>
         </div>
       </div>
@@ -804,6 +828,16 @@ const CustomerDashboard = () => {
                         <Building2 size={16} />
                         <span>{appointment.businessName}</span>
                       </div>
+                      {appointment.businessAddress && (
+                        <div style={{ fontSize: '13px', color: '#6b7280' }}>
+                          <MapPin size={14} /> {appointment.businessAddress}
+                        </div>
+                      )}
+                      {appointment.businessPhone && (
+                        <div style={{ fontSize: '13px', color: '#6b7280' }}>
+                          <Phone size={14} /> {appointment.businessPhone}
+                        </div>
+                      )}
                     </div>
 
                     <div className="appointment-actions" style={{ 
@@ -849,6 +883,61 @@ const CustomerDashboard = () => {
                         Cancel
                       </button>
                     </div>
+
+                    {/* Rating section */}
+                    {appointment.status === 'completed' && !appointment.rating && (
+                      <div className="rating-prompt" style={{ 
+                        marginTop: '12px', 
+                        padding: '8px', 
+                        backgroundColor: '#f0f9ff', 
+                        border: '1px solid #bfdbfe', 
+                        borderRadius: '8px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '4px'
+                      }}>
+                        <span style={{ fontSize: '14px', color: '#111827' }}>
+                          Rate your experience with {appointment.service}
+                        </span>
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          {[1, 2, 3, 4, 5].map(star => (
+                            <span
+                              key={star}
+                              style={{ 
+                                fontSize: 28, 
+                                color: userRating >= star ? '#fbbf24' : '#d1d5db', 
+                                cursor: 'pointer' 
+                              }}
+                              onClick={() => setUserRating(star)}
+                            >★</span>
+                          ))}
+                        </div>
+                        <button 
+                          onClick={handleRatingSubmit}
+                          className="submit-rating-button"
+                          style={{ 
+                            marginTop: '8px', 
+                            padding: '8px 16px', 
+                            backgroundColor: '#10b981', 
+                            color: '#fff', 
+                            borderRadius: '8px',
+                            border: 'none',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Submit Rating
+                        </button>
+                      </div>
+                    )}
+                    {appointment.rating && (
+                      <div className="rating-display" style={{ 
+                        marginTop: '12px', 
+                        fontSize: '14px', 
+                        color: '#374151' 
+                      }}>
+                        Your Rating: {renderStars(appointment.rating)} {appointment.rating}/5
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
