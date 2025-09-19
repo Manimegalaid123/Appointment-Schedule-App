@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
   Calendar, 
@@ -21,7 +21,7 @@ import './CustomerDashboard.css';
 import { useNavigate } from 'react-router-dom';
 
 const CustomerDashboard = () => {
-  const customerName = localStorage.getItem('name');
+  const [customerName, setCustomerName] = useState('');
   const customerEmail = localStorage.getItem('email');
   const [formData, setFormData] = useState({
     customerName: customerName || '',
@@ -460,7 +460,7 @@ const CustomerDashboard = () => {
       {/* Header */}
       <div className="dashboard-header">
         <div className="welcome-section">
-          <h1>Welcome, {customerName || customerEmail || 'Customer'}</h1>
+          <h1>Welcome, {customerName || 'Customer'}</h1>
           <p>Manage your appointments with ease</p>
         </div>
       </div>

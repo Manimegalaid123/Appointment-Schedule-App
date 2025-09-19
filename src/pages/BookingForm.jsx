@@ -60,6 +60,15 @@ const BookingForm = ({ business, service, workingHours, onClose }) => {
     setError('');
     setSuccess('');
     try {
+      console.log({
+        businessEmail: business.email,
+        service,
+        date,
+        time: selectedSlot,
+        notes,
+        customerName,
+        customerEmail
+      });
       const res = await fetch('http://localhost:5000/api/appointments/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

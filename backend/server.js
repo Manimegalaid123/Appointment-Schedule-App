@@ -20,6 +20,7 @@ app.use('/api', businessRoutes);
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/business-services', require('./routes/serviceRoutes'));
 app.use('/api/appointments', require('./routes/appointmentRoutes'));
+app.use('/api/users', require('./routes/userRoutes'));
 
 // New route to get businesses by type
 app.get('/api/businesses', async (req, res) => {
