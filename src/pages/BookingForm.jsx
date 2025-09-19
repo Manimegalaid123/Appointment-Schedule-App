@@ -26,7 +26,7 @@ const BookingForm = ({ business, service, workingHours, onClose }) => {
   const [success, setSuccess] = useState('');
   const [bookedSlots, setBookedSlots] = useState([]);
 
-  const customerName = localStorage.getItem('name') || 'Customer';
+  const customerName = localStorage.getItem('name');
   const customerEmail = localStorage.getItem('email');
 
   const slots = workingHours

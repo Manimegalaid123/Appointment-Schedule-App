@@ -460,7 +460,7 @@ const CustomerDashboard = () => {
       {/* Header */}
       <div className="dashboard-header">
         <div className="welcome-section">
-          <h1>Welcome, {customerName || 'Customer'}</h1>
+          <h1>Welcome, {customerName || customerEmail || 'Customer'}</h1>
           <p>Manage your appointments with ease</p>
         </div>
       </div>
