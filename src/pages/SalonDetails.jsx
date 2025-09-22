@@ -115,7 +115,14 @@ const SalonDetails = () => {
             )}
             <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 4 }}>{service.description}</div>
             <div>
-              Rating: {renderStars(service.rating)} {service.rating || 'N/A'}
+              Rating: {service.rating ? `${service.rating.toFixed(1)} / 5` : 'N/A'}
+              {/* Optionally, show stars */}
+              {service.rating && (
+                <span style={{ color: '#fbbf24', marginLeft: 4 }}>
+                  {'★'.repeat(Math.round(service.rating))}
+                  {'☆'.repeat(5 - Math.round(service.rating))}
+                </span>
+              )}
             </div>
           </div>
         ))}

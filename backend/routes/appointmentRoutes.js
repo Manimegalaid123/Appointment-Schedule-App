@@ -15,13 +15,8 @@ router.get('/:businessEmail', appointmentController.getByBusinessEmail);
 
 // Get appointments by customer email
 router.get('/customer/:email', async (req, res) => {
-  const email = decodeURIComponent(req.params.email).trim();
-  try {
-    const appointments = await Appointment.find({ customerEmail: email });
-    res.json({ success: true, appointments });
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'Server Error' });
-  }
+  const appointments = await Appointment.find({ customerEmail: req.params.email });
+  res.json({ appointments });
 });
 
 // Update appointment status with email notification
@@ -81,6 +76,39 @@ router.post('/create', async (req, res) => {
     console.error('Appointment creation error:', err); // <-- This will print the real error
     res.status(500).json({ message: 'Server error' });
   }
+});
+
+// POST /api/appointments/rate
+router.post('/rate', async (req, res) => {
+  const { appointmentId, rating } = req.body;
+  // 1. Save rating to appointment
+  const appointment = await Appointment.findByIdAndUpdate(
+    appointmentId,
+    { rating },
+    { new: true }
+  );
+  if (!appointment) return res.status(404).json({ success: false, message: 'Appointment not found' });
+
+  // 2. Update average rating for the service
+  const serviceName = appointment.service;
+  const businessEmail = appointment.businessEmail;
+  // Find all completed & rated appointments for this service
+  const ratedAppointments = await Appointment.find({
+    service: serviceName,
+    businessEmail,
+    rating: { $exists: true }
+  });
+  const avgRating =
+    ratedAppointments.reduce((sum, a) => sum + (a.rating || 0), 0) /
+    (ratedAppointments.length || 1);
+
+  // Update the service rating in the business/services array
+  await Business.updateOne(
+    { email: businessEmail, 'services.name': serviceName },
+    { $set: { 'services.$.rating': avgRating } }
+  );
+
+  res.json({ success: true, avgRating });
 });
 
 module.exports = router;

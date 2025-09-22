@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { 
   Calendar, 
@@ -74,10 +74,10 @@ const CustomerDashboard = () => {
   useEffect(() => {
     const fetchAppointments = async () => {
       try {
-        const response = await appointmentAPI.getAppointmentsByCustomer(customerEmail);
-        if (response.success) setAppointments(response.appointments);
-      } catch (error) {
-        console.error('Error fetching appointments:', error);
+        const res = await axios.get(`http://localhost:5000/api/appointments/customer/${customerEmail}`);
+        setAppointments(res.data.appointments || []);
+      } catch (err) {
+        setAppointments([]);
       }
     };
     fetchAppointments();
@@ -261,20 +261,24 @@ const CustomerDashboard = () => {
   };
 
   const handleRatingSubmit = async () => {
-    if (userRating < 1 || userRating > 5) return;
-
+    if (userRating < 1 || userRating > 5 || !ratingModal) return;
     try {
-      const response = await appointmentAPI.rateAppointment(ratingModal._id, userRating);
-      if (response.success) {
-        setAppointments(prev => 
-          prev.map(appointment => 
-            appointment._id === ratingModal._id ? { ...appointment, rating: userRating } : appointment
+      const response = await axios.post('http://localhost:5000/api/appointments/rate', {
+        appointmentId: ratingModal._id,
+        rating: userRating
+      });
+      if (response.data.success) {
+        setAppointments(prev =>
+          prev.map(appointment =>
+            appointment._id === ratingModal._id
+              ? { ...appointment, rating: userRating }
+              : appointment
           )
         );
         setRatingModal(null);
         setUserRating(0);
       } else {
-        console.error('Failed to submit rating:', response.message);
+        console.error('Failed to submit rating:', response.data.message);
       }
     } catch (error) {
       console.error('Error submitting rating:', error);
@@ -769,175 +773,61 @@ const CustomerDashboard = () => {
               </div>
             ) : (
               <div className="appointments-list">
-                {appointments.map(appointment => (
-                  <div key={appointment._id} className="appointment-card" style={{ 
-                    backgroundColor: '#fff', 
-                    border: '1px solid #e5e7eb', 
-                    borderRadius: '8px', 
-                    padding: '16px',
-                    marginBottom: '12px',
-                    position: 'relative'
+                {appointments.map(app => (
+                  <div key={app._id} style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    border: '1px solid #eee',
+                    borderRadius: 12,
+                    padding: 16,
+                    marginBottom: 16,
+                    gap: 24
                   }}>
-                    <div className="appointment-details" style={{ 
-                      display: 'flex', 
-                      flexDirection: 'column', 
-                      gap: '8px'
-                    }}>
-                      <div className="appointment-header" style={{ 
-                        display: 'flex', 
-                        justifyContent: 'space-between', 
-                        alignItems: 'center'
-                      }}>
-                        <h3 style={{ 
-                          margin: 0, 
-                          fontSize: '16px', 
-                          color: '#111827'
-                        }}>
-                          {appointment.service}
-                        </h3>
-                        <span style={{ 
-                          fontSize: '14px', 
-                          color: getStatusColor(appointment.status),
-                          fontWeight: '500'
-                        }}>
-                          {appointment.status.charAt(0).toUpperCase() + appointment.status.slice(1)}
-                        </span>
+                    {/* Service/Doctor Image (optional, if you have it) */}
+                    <img
+                      src={app.serviceImageUrl || "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=facearea&w=120&h=120"}
+                      alt={app.service}
+                      style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 8, background: '#f3f4f6' }}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 'bold', fontSize: 18 }}>{app.service}</div>
+                      <div style={{ color: '#6b7280', fontSize: 15 }}>
+                        <b>Address:</b> {app.businessAddress || 'N/A'}
                       </div>
-                      <div className="appointment-time" style={{ 
-                        display: 'flex', 
-                        gap: '8px',
-                        fontSize: '14px',
-                        color: '#6b7280'
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <Calendar size={16} />
-                          <span>{new Date(appointment.date).toLocaleDateString()}</span>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <Clock size={16} />
-                          <span>{formatTimeFor12Hour(appointment.time)}</span>
-                        </div>
+                      <div style={{ color: '#6b7280', fontSize: 15 }}>
+                        <b>Date & Time:</b> {app.date} | {app.time}
                       </div>
-                      <div className="appointment-business" style={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        gap: '8px',
-                        fontSize: '14px',
-                        color: '#374151'
-                      }}>
-                        <Building2 size={16} />
-                        <span>{appointment.businessName}</span>
-                      </div>
-                      {appointment.businessAddress && (
-                        <div style={{ fontSize: '13px', color: '#6b7280' }}>
-                          <MapPin size={14} /> {appointment.businessAddress}
-                        </div>
-                      )}
-                      {appointment.businessPhone && (
-                        <div style={{ fontSize: '13px', color: '#6b7280' }}>
-                          <Phone size={14} /> {appointment.businessPhone}
-                        </div>
-                      )}
                     </div>
-
-                    <div className="appointment-actions" style={{ 
-                      display: 'flex', 
-                      justifyContent: 'flex-end', 
-                      gap: '8px',
-                      marginTop: '12px'
-                    }}>
-                      <button 
-                        onClick={() => handleReschedule(appointment._id, appointment.date, appointment.time)}
-                        className="reschedule-button"
-                        style={{ 
-                          backgroundColor: '#3b82f6', 
-                          color: '#fff', 
-                          padding: '8px 16px', 
-                          borderRadius: '8px',
-                          border: 'none',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}
-                      >
-                        <Clock size={16} />
-                        Reschedule
-                      </button>
-                      <button 
-                        onClick={() => handleCancel(appointment._id)}
-                        className="cancel-button"
-                        style={{ 
-                          backgroundColor: '#ef4444', 
-                          color: '#fff', 
-                          padding: '8px 16px', 
-                          borderRadius: '8px',
-                          border: 'none',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}
-                      >
-                        <Trash size={16} />
-                        Cancel
-                      </button>
-                    </div>
-
-                    {/* Rating section */}
-                    {appointment.status === 'completed' && !appointment.rating && (
-                      <div className="rating-prompt" style={{ 
-                        marginTop: '12px', 
-                        padding: '8px', 
-                        backgroundColor: '#f0f9ff', 
-                        border: '1px solid #bfdbfe', 
-                        borderRadius: '8px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '4px'
-                      }}>
-                        <span style={{ fontSize: '14px', color: '#111827' }}>
-                          Rate your experience with {appointment.service}
-                        </span>
-                        <div style={{ display: 'flex', gap: '4px' }}>
-                          {[1, 2, 3, 4, 5].map(star => (
-                            <span
-                              key={star}
-                              style={{ 
-                                fontSize: 28, 
-                                color: userRating >= star ? '#fbbf24' : '#d1d5db', 
-                                cursor: 'pointer' 
-                              }}
-                              onClick={() => setUserRating(star)}
-                            >★</span>
-                          ))}
-                        </div>
-                        <button 
-                          onClick={handleRatingSubmit}
-                          className="submit-rating-button"
-                          style={{ 
-                            marginTop: '8px', 
-                            padding: '8px 16px', 
-                            backgroundColor: '#10b981', 
-                            color: '#fff', 
-                            borderRadius: '8px',
-                            border: 'none',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          Submit Rating
+                    <div>
+                      {app.status === 'cancelled' && (
+                        <button style={{ color: '#ef4444', border: '1px solid #ef4444', background: '#fff', borderRadius: 6, padding: '6px 12px' }}>
+                          Appointment cancelled
                         </button>
-                      </div>
-                    )}
-                    {appointment.rating && (
-                      <div className="rating-display" style={{ 
-                        marginTop: '12px', 
-                        fontSize: '14px', 
-                        color: '#374151' 
-                      }}>
-                        Your Rating: {renderStars(appointment.rating)} {appointment.rating}/5
-                      </div>
-                    )}
+                      )}
+                      {app.status === 'pending' && (
+                        <button style={{ color: '#f59e42', border: '1px solid #f59e42', background: '#fff', borderRadius: 6, padding: '6px 12px' }}>
+                          Pending
+                        </button>
+                      )}
+                      {app.status === 'accepted' && (
+                        <button style={{ color: '#10b981', border: '1px solid #10b981', background: '#fff', borderRadius: 6, padding: '6px 12px' }}>
+                          Accepted
+                        </button>
+                      )}
+                      {app.status === 'completed' && !app.rating && (
+                        <button
+                          style={{ color: '#6366f1', border: '1px solid #6366f1', background: '#fff', borderRadius: 6, padding: '6px 12px' }}
+                          onClick={() => setRatingModal(app)}
+                        >
+                          Rate this service
+                        </button>
+                      )}
+                      {app.status === 'completed' && app.rating && (
+                        <div>
+                          Your Rating: {'★'.repeat(app.rating)}{'☆'.repeat(5 - app.rating)} ({app.rating}/5)
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

@@ -519,3 +519,12 @@ const SignupPage = () => {
 };
 
 export default SignupPage;
+
+// After successful login API call:
+// const response = await axios.post('/api/auth/login', { email, password });
+// if (response.data.success) {
+//   const user = response.data.user; // or however your backend returns the user object
+//   localStorage.setItem('name', user.name);
+//   localStorage.setItem('email', user.email);
+//   // ...redirect or update UI...
+// }

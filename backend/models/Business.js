@@ -1,17 +1,21 @@
 const mongoose = require('mongoose');
 
 const BusinessSchema = new mongoose.Schema({
-  businessType: { type: String, required: true },
   businessName: { type: String, required: true },
-  businessAddress: String,
-  services: [String],
-  workingHours: String,
-  specialization: String,
-  doctors: [String],
-  courses: [String],
-  email: String,
-  phone: String,
-  owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true } // Link to manager
+  businessType: { type: String, required: true },
+  businessAddress: { type: String, required: true },
+  phone: { type: String, required: true },
+  email: { type: String, required: true },
+  workingHours: { type: String, required: true },
+  imageUrl: { type: String }, // <-- Add this for shop photo
+  services: [
+    {
+      name: String,
+      description: String,
+      imageUrl: String,
+      rating: Number
+    }
+  ]
 });
 
 module.exports = mongoose.model('Business', BusinessSchema);

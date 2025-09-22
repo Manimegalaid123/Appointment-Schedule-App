@@ -53,6 +53,7 @@ const LoginPage = () => {
       const businessName = encodeURIComponent(res.data.businessName || name);
       const businessEmail = encodeURIComponent(formData.email);
       // After successful login/signup
+      localStorage.setItem('name', res.data.name); // <-- ADD THIS LINE
       localStorage.setItem('email', formData.email); // user.email is the logged-in customer's email
       if (role === 'customer') {
         navigate(`/customer-dashboard/${name}`);

@@ -6,7 +6,8 @@ const ServiceSchema = new mongoose.Schema({
   description: String,
   price: { type: Number, required: true },
   duration: { type: Number, required: true }, // in minutes
-  status: { type: String, enum: ['active', 'inactive'], default: 'active' }
+  status: { type: String, enum: ['active', 'inactive'], default: 'active' },
+  imageUrl: { type: String }, // <-- Add this line
 }, { timestamps: true });
 
 module.exports = mongoose.model('Service', ServiceSchema);

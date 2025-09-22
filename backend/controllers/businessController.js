@@ -28,3 +28,16 @@ exports.updateBusiness = async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
+
+// Example: inside your registerBusiness function
+const newBusiness = new Business({
+  businessName: req.body.businessName,
+  businessType: req.body.businessType,
+  businessAddress: req.body.businessAddress,
+  phone: req.body.phone,
+  email: req.body.email,
+  workingHours: req.body.workingHours,
+  imageUrl: req.body.imageUrl, // <-- Save the image URL
+  services: req.body.services || []
+});
+await newBusiness.save();
