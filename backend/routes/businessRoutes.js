@@ -1,166 +1,164 @@
 const express = require('express');
 const router = express.Router();
-const Business = require('../models/Business'); // Adjust path if needed
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const Business = require('../models/Business');
 
+// Create uploads directory
+const uploadsDir = path.join(__dirname, '../uploads/businessImages');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Configure multer
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadsDir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueName = Date.now() + '-' + Math.round(Math.random() * 1E9) + path.extname(file.originalname);
+    cb(null, uniqueName);
+  }
+});
+
+const upload = multer({ 
+  storage: storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed!'), false);
+    }
+  }
+});
+
+// Get business by email - ✅ Add detailed logging
 router.get('/email/:email', async (req, res) => {
-  const email = req.params.email;
   try {
-    const business = await Business.findOne({ email });
-    if (business) {
-      res.json({ success: true, business });
-    } else {
-      res.json({ success: false, message: 'Consultant not found' });
+    console.log('🔍 Fetching business by email:', req.params.email);
+    const business = await Business.findOne({ email: req.params.email });
+    
+    if (!business) {
+      console.log('❌ Business not found for email:', req.params.email);
+      return res.status(404).json({ success: false, message: 'Business not found' });
     }
-  } catch (err) {
+    
+    console.log('✅ Business found:', {
+      name: business.businessName,
+      email: business.email,
+      imageUrl: business.imageUrl,
+      address: business.businessAddress
+    });
+    
+    res.json({ success: true, business });
+  } catch (error) {
+    console.error('❌ Get business by email error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
+// Update business profile with image - ✅ Add detailed logging
+router.put('/update-profile/:email', upload.single('businessImage'), async (req, res) => {
+  try {
+    const { businessName, businessAddress, workingHours, phone } = req.body;
+    
+    console.log('📝 Update profile request:', { 
+      email: req.params.email, 
+      businessName, 
+      businessAddress,
+      workingHours,
+      phone,
+      hasFile: !!req.file 
+    });
+    
+    // Find existing business first
+    const existingBusiness = await Business.findOne({ email: req.params.email });
+    if (!existingBusiness) {
+      console.log('❌ Business not found for update:', req.params.email);
+      return res.status(404).json({ success: false, message: 'Business not found' });
+    }
+    
+    const updateData = {
+      businessName: businessName || existingBusiness.businessName,
+      businessAddress: businessAddress || existingBusiness.businessAddress,
+      workingHours: workingHours || existingBusiness.workingHours,
+      phone: phone || existingBusiness.phone
+    };
+    
+    // Only update imageUrl if a new file is uploaded
+    if (req.file) {
+      updateData.imageUrl = `/uploads/businessImages/${req.file.filename}`;
+      console.log('🖼️ New image uploaded:', updateData.imageUrl);
+    }
+    
+    console.log('📦 Update data:', updateData);
+    
+    const business = await Business.findOneAndUpdate(
+      { email: req.params.email },
+      updateData,
+      { new: true, runValidators: true }
+    );
+    
+    if (!business) {
+      console.log('❌ Failed to update business');
+      return res.status(404).json({ success: false, message: 'Business not found' });
+    }
+    
+    console.log('✅ Business updated successfully:', {
+      name: business.businessName,
+      email: business.email,
+      imageUrl: business.imageUrl,
+      address: business.businessAddress
+    });
+    
+    res.json({ success: true, business });
+  } catch (error) {
+    console.error('❌ Update profile error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Add service to business
 router.post('/email/:email/add-service', async (req, res) => {
-  const email = req.params.email;
-  const { service } = req.body;
   try {
-    const business = await Business.findOne({ email });
-    if (!business) return res.json({ success: false, message: 'Consultant not found' });
-    if (!business.services.includes(service)) {
-      business.services.push(service);
-      await business.save();
+    const { service } = req.body;
+    const business = await Business.findOneAndUpdate(
+      { email: req.params.email },
+      { $addToSet: { services: service } },
+      { new: true }
+    );
+    
+    if (!business) {
+      return res.status(404).json({ success: false, message: 'Business not found' });
     }
+    
     res.json({ success: true, services: business.services });
-  } catch (err) {
+  } catch (error) {
+    console.error('Add service error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
-router.post('/auth/register', async (req, res) => {
+// Update business by ID (for backward compatibility)
+router.put('/:id', async (req, res) => {
   try {
-    const { name, email, phone, address, password, role, businessType, businessData } = req.body;
-
-    // Check if user/business already exists
-    const exists = await Business.findOne({ email });
-    if (exists) return res.json({ success: false, message: 'Email already registered.' });
-
-    // Prepare business fields if manager
-    let businessFields = {};
-    if (role === 'manager' && businessData) {
-      businessFields = {
-        businessType,
-        businessName: businessData.businessName,
-        businessAddress: businessData.businessAddress,
-        services: businessData.services || [],
-        workingHours: businessData.workingHours,
-        specialization: businessData.specialization,
-        doctors: businessData.doctors || [],
-        courses: businessData.courses || []
-      };
+    const business = await Business.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true }
+    );
+    
+    if (!business) {
+      return res.status(404).json({ success: false, message: 'Business not found' });
     }
-
-    // Create new business/user
-    const business = new Business({
-      name,
-      email,
-      phone,
-      address,
-      password,
-      role,
-      ...businessFields
-    });
-
-    await business.save();
-    res.json({ success: true, message: 'Account created successfully!', business });
-  } catch (err) {
+    
+    res.json({ success: true, business });
+  } catch (error) {
+    console.error('Update business error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
-});
-
-router.post('/business/register', async (req, res) => {
-  try {
-    const { name, email, phone, address, password, role, businessType, businessData } = req.body;
-
-    // Check if user/business already exists
-    const exists = await Business.findOne({ email });
-    if (exists) return res.json({ success: false, message: 'Email already registered.' });
-
-    // Prepare business fields if manager
-    let businessFields = {};
-    if (role === 'manager' && businessData) {
-      businessFields = {
-        businessType,
-        businessName: businessData.businessName,
-        businessAddress: businessData.businessAddress,
-        services: businessData.services || [],
-        workingHours: businessData.workingHours,
-        specialization: businessData.specialization,
-        doctors: businessData.doctors || [],
-        courses: businessData.courses || []
-      };
-    }
-
-    // Create new business/user
-    const business = new Business({
-      name,
-      email,
-      phone,
-      address,
-      password,
-      role,
-      ...businessFields
-    });
-
-    await business.save();
-    res.json({ success: true, message: 'Account created successfully!', business });
-  } catch (err) {
-    console.error('Registration error:', err); // <-- This will show the error in your backend terminal
-    res.status(500).json({ success: false, message: 'Server error', error: err.message });
-  }
-});
-
-router.get('/business/email/:email', async (req, res) => {
-  const email = decodeURIComponent(req.params.email).trim(); // decode and trim!
-  try {
-    const business = await Business.findOne({ email });
-    if (business) {
-      res.json({ success: true, business });
-    } else {
-      res.json({ success: false, message: 'Business not found' });
-    }
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-router.post('/business/email/:email/add-service', async (req, res) => {
-  const email = decodeURIComponent(req.params.email); // decode email!
-  const { service } = req.body;
-  try {
-    const business = await Business.findOne({ email });
-    if (!business) return res.json({ success: false, message: 'Business not found' });
-    if (!business.services.includes(service)) {
-      business.services.push(service);
-      await business.save();
-    }
-    res.json({ success: true, services: business.services });
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-router.post('/services/rate', async (req, res) => {
-  const { businessId, serviceName, rating } = req.body;
-  if (!businessId || !serviceName || !rating) {
-    return res.status(400).json({ success: false, message: 'Missing fields' });
-  }
-  const business = await Business.findById(businessId);
-  if (!business) return res.status(404).json({ success: false, message: 'Business not found' });
-
-  // Find the service and update/add rating (simple average for demo)
-  const service = business.services.find(s => s.name === serviceName);
-  if (!service) return res.status(404).json({ success: false, message: 'Service not found' });
-
-  // For demo: just overwrite rating, or you can keep an array of ratings for average
-  service.rating = rating;
-  await business.save();
-  res.json({ success: true, service });
 });
 
 module.exports = router;

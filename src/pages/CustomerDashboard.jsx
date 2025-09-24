@@ -14,11 +14,12 @@ import {
   Loader2,
   CalendarDays,
   AlertCircle,
-  Info
+  Info,
+  Navigation  // Add this import
 } from 'lucide-react';
 import { businessAPI, appointmentAPI } from '../utils/api';
 import './CustomerDashboard.css';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 
 const CustomerDashboard = () => {
   const [customerName, setCustomerName] = useState('');
@@ -38,7 +39,7 @@ const CustomerDashboard = () => {
   const [isSuccess, setIsSuccess] = useState(false);
   const [serviceError, setServiceError] = useState('');
   const [appointments, setAppointments] = useState([]);
-  const [activeTab, setActiveTab] = useState('booking');
+  const [activeTab, setActiveTab] = useState('browse');
   const [bookedTimes, setBookedTimes] = useState([]);
   const [bookingError, setBookingError] = useState('');
   const [loadingBookedTimes, setLoadingBookedTimes] = useState(false);
@@ -50,7 +51,7 @@ const CustomerDashboard = () => {
   const [businesses, setBusinesses] = useState([]);
   const [selectedBusiness, setSelectedBusiness] = useState(null);
   const [selectedType, setSelectedType] = useState('');
-  // const [searchQuery, setSearchQuery] = useState('');
+  const [showBookingForm, setShowBookingForm] = useState(false);
 
   const [ratingModal, setRatingModal] = useState(null);
   const [userRating, setUserRating] = useState(0);
@@ -126,13 +127,12 @@ const CustomerDashboard = () => {
   const handleInputChange = async (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-    setBookingError(''); // Clear any previous booking errors
+    setBookingError('');
 
     if (name === 'businessEmail' && /\S+@\S+\.\S+/.test(value)) {
       await fetchBusinessServices(value);
     }
 
-    // Reset time selection when service or date changes
     if (name === 'service' || name === 'date') {
       setFormData(prev => ({ ...prev, time: '' }));
     }
@@ -152,15 +152,10 @@ const CustomerDashboard = () => {
       if (response.success && response.business) {
         const business = response.business;
 
-        // Set services
         setServices(business.services || []);
-
-        // Set business name
         setBusinessName(business.businessName || business.name || 'Business');
 
-        // --- Paste here: normalize and parse working hours ---
         const normalizeTimeString = (str) => {
-          // Add space before AM/PM if missing
           return str.replace(/([0-9])([AP]M)/gi, '$1 $2');
         };
 
@@ -186,7 +181,6 @@ const CustomerDashboard = () => {
           setWorkingHours({ start: '09:00', end: '19:00' });
           setShowWorkingHours(false);
         }
-        // --- End paste ---
       } else {
         setServiceError('Business not found or error fetching services.');
         setServices([]);
@@ -204,6 +198,20 @@ const CustomerDashboard = () => {
     }
   };
 
+  const handleServiceSelect = (business, service) => {
+    setSelectedBusiness(business);
+    setFormData(prev => ({
+      ...prev,
+      businessEmail: business.email,
+      service: service,
+      date: '',
+      time: '',
+      notes: ''
+    }));
+    fetchBusinessServices(business.email);
+    setShowBookingForm(true);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -219,7 +227,6 @@ const CustomerDashboard = () => {
 
       if (response.data && response.data.success) {
         setIsSuccess(true);
-        // Refresh appointments list
         const appointmentsResponse = await appointmentAPI.getAppointmentsByCustomer(customerEmail);
         if (appointmentsResponse.success) {
           setAppointments(appointmentsResponse.appointments);
@@ -242,6 +249,8 @@ const CustomerDashboard = () => {
           setBusinessName('');
           setWorkingHours({ start: '09:00', end: '19:00' });
           setShowWorkingHours(false);
+          setShowBookingForm(false);
+          setSelectedBusiness(null);
         }, 3000);
       } else {
         setBookingError(response.data?.message || 'Failed to book appointment. Please try again.');
@@ -296,17 +305,13 @@ const CustomerDashboard = () => {
     );
   };
 
-  // Helper function to convert 12-hour to 24-hour format
   const convertTo24Hour = (timeStr) => {
     try {
       if (!timeStr || typeof timeStr !== 'string') return '09:00';
       
-      // Remove extra spaces and handle different formats
       const cleanTime = timeStr.trim().replace(/\s+/g, ' ');
       
-      // If already in 24-hour format
       if (!cleanTime.includes('AM') && !cleanTime.includes('PM')) {
-        // Validate format HH:MM
         if (/^\d{1,2}:\d{2}$/.test(cleanTime)) {
           const [h, m] = cleanTime.split(':');
           const hour = parseInt(h, 10);
@@ -317,7 +322,6 @@ const CustomerDashboard = () => {
         return '09:00';
       }
       
-      // Handle 12-hour format
       const [time, modifier] = cleanTime.split(' ');
       if (!time || !modifier) return '09:00';
       
@@ -342,7 +346,6 @@ const CustomerDashboard = () => {
     }
   };
 
-  // Helper function to check if time is within working hours
   const isWithinWorkingHours = (time, start, end) => {
     try {
       const toMinutes = (t) => {
@@ -357,11 +360,10 @@ const CustomerDashboard = () => {
       return timeMinutes >= startMinutes && timeMinutes <= endMinutes;
     } catch (error) {
       console.error('Error checking working hours:', error);
-      return true; // Default to true if there's an error
+      return true;
     }
   };
 
-  // Generate time slots (30-minute intervals from 6 AM to 11 PM)
   const generateTimeSlots = () => {
     const slots = [];
     for (let hour = 6; hour <= 23; hour++) {
@@ -380,7 +382,6 @@ const CustomerDashboard = () => {
 
   const allTimeSlots = generateTimeSlots();
   
-  // Filter time slots based on working hours
   const availableTimeSlots = allTimeSlots.filter(slot => 
     isWithinWorkingHours(slot.value, workingHours.start, workingHours.end)
   );
@@ -401,7 +402,6 @@ const CustomerDashboard = () => {
     }
   };
 
-  // Convert 24-hour to 12-hour for display
   const formatTimeFor12Hour = (time24) => {
     try {
       return new Date(`2024-01-01T${time24}`).toLocaleTimeString('en-US', {
@@ -415,21 +415,66 @@ const CustomerDashboard = () => {
   };
 
   useEffect(() => {
-    if (!selectedType) {
-      setBusinesses([]);
-      return;
-    }
     const fetchBusinesses = async () => {
       try {
-        const response = await axios.get(`http://localhost:5000/api/businesses?type=${selectedType}`);
-        if (response.data.success) setBusinesses(response.data.businesses);
-        else setBusinesses([]);
+        let url = 'http://localhost:5000/api/businesses';
+        if (selectedType) {
+          url += `?type=${selectedType}`;
+        }
+        const response = await axios.get(url);
+        if (response.data.success) {
+          setBusinesses(response.data.businesses);
+        } else {
+          setBusinesses([]);
+        }
       } catch (error) {
         setBusinesses([]);
       }
     };
     fetchBusinesses();
   }, [selectedType]);
+
+  const [showMapModal, setShowMapModal] = useState(false);
+  const [selectedMapAddress, setSelectedMapAddress] = useState('');
+  const [selectedMapBusinessName, setSelectedMapBusinessName] = useState('');
+
+  // Handle address click to show map - IMPROVED WITH ADDRESS VALIDATION
+  const handleAddressClick = (address, businessName) => {
+    if (!address || address === 'N/A' || address.trim() === '') {
+      alert('Address not available for this business');
+      return;
+    }
+    
+    const confirmed = confirm(
+      `Open ${businessName} location in maps?\n\nAddress: ${address}\n\nClick OK to open in maps app`
+    );
+    
+    if (confirmed) {
+      openInNavigationApp(address);
+    }
+  };
+
+  // Open in external navigation apps
+  const openInNavigationApp = (address) => {
+    const encodedAddress = encodeURIComponent(address);
+    
+    // Try to detect device and open appropriate app
+    const userAgent = navigator.userAgent.toLowerCase();
+    let url;
+    
+    if (userAgent.includes('iphone') || userAgent.includes('ipad')) {
+      // iOS - Apple Maps
+      url = `https://maps.apple.com/?daddr=${encodedAddress}`;
+    } else if (userAgent.includes('android')) {
+      // Android - Google Maps
+      url = `https://www.google.com/maps/dir/?api=1&destination=${encodedAddress}`;
+    } else {
+      // Desktop - Google Maps (CHANGED FROM OpenStreetMap)
+      url = `https://www.google.com/maps/search/${encodedAddress}`;
+    }
+    
+    window.open(url, '_blank');
+  };
 
   if (isSuccess) {
     return (
@@ -469,15 +514,8 @@ const CustomerDashboard = () => {
         </div>
       </div>
 
-      {/* Navigation Tabs */}
+      {/* Navigation Tabs - REMOVED Browse Services Tab */}
       <div className="navigation-tabs">
-        <button 
-          className={`nav-tab ${activeTab === 'booking' ? 'active' : ''}`}
-          onClick={() => setActiveTab('booking')}
-        >
-          <Calendar size={20} />
-          <span>Book Appointment</span>
-        </button>
         <button 
           className={`nav-tab ${activeTab === 'appointments' ? 'active' : ''}`}
           onClick={() => setActiveTab('appointments')}
@@ -489,255 +527,304 @@ const CustomerDashboard = () => {
 
       {/* Content Area */}
       <div className="content-area">
-        {activeTab === 'booking' && (
-          <div className="booking-content">
-            <div className="content-header">
-              <h2>Book New Appointment</h2>
-              <p>Fill in the details below to schedule your appointment</p>
+        {/* ALWAYS SHOW DROPDOWN FIRST - NO TAB CONDITION */}
+        {activeTab !== 'appointments' && (
+          <div className="browse-content">
+            <div className="content-header" style={{ textAlign: 'center', marginBottom: '40px' }}>
+              <h1 style={{ fontSize: '32px', fontWeight: '700', color: '#1f2937', marginBottom: '16px' }}>
+                Choose Your Appointment Type
+              </h1>
+              <p style={{ fontSize: '16px', color: '#6b7280' }}>
+                Select the type of service you're looking for and browse available providers
+              </p>
             </div>
 
-            {/* Error Message */}
-            {bookingError && (
-              <div className="error-banner" style={{ 
-                backgroundColor: '#fee2e2', 
-                border: '1px solid #fecaca', 
-                color: '#dc2626', 
-                padding: '12px', 
-                borderRadius: '8px', 
-                marginBottom: '20px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
+            {/* Business Type Filter - CENTERED AND PROMINENT */}
+            <div style={{ 
+              marginBottom: '40px', 
+              textAlign: 'center',
+              backgroundColor: 'white',
+              padding: '32px',
+              borderRadius: '12px',
+              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+              maxWidth: '600px',
+              margin: '0 auto 40px auto'
+            }}>
+              <label style={{ 
+                display: 'block', 
+                marginBottom: '16px', 
+                fontSize: '18px',
+                fontWeight: '600',
+                color: '#374151'
               }}>
-                <AlertCircle size={16} />
-                <span>{bookingError}</span>
-              </div>
-            )}
-
-            {/* Working Hours Info */}
-            {showWorkingHours && businessName && (
-              <div className="working-hours-info" style={{
-                backgroundColor: '#eff6ff',
-                border: '1px solid #bfdbfe',
-                color: '#1e40af',
-                padding: '12px',
-                borderRadius: '8px',
-                marginBottom: '20px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}>
-                <Info size={16} />
-                <span>
-                  <strong>{businessName}</strong> is open from{' '}
-                  <strong>{formatTimeFor12Hour(workingHours.start)}</strong> to{' '}
-                  <strong>{formatTimeFor12Hour(workingHours.end)}</strong>
-                </span>
-              </div>
-            )}
-
-            {/* Business Type Selection */}
-            <div style={{ marginBottom: '20px' }}>
-              <label>
-                Choose Business Type:&nbsp;
-                <select value={selectedType} onChange={e => setSelectedType(e.target.value)}>
-                  <option value="">-- Select --</option>
-                  <option value="salon">Salon</option>
-                  <option value="doctor">Doctor</option>
-                  <option value="consultant">Consultant</option>
-                  {/* Add more types as needed */}
-                </select>
+                Choose Business Type:
               </label>
+              <select 
+                value={selectedType} 
+                onChange={e => setSelectedType(e.target.value)}
+                style={{
+                  width: '100%',
+                  maxWidth: '400px',
+                  padding: '16px 20px',
+                  border: '2px solid #d1d5db',
+                  borderRadius: '8px',
+                  fontSize: '16px',
+                  backgroundColor: 'white',
+                  cursor: 'pointer',
+                  outline: 'none'
+                }}
+              >
+                <option value="">-- Select Type --</option>
+                <option value="salon">Salon</option>
+                <option value="doctor">Doctor</option>
+                <option value="consultant">Consultant</option>
+              </select>
             </div>
 
-            {/* Show businesses as cards for selected type */}
+            {/* No Selection State */}
+            {!selectedType && (
+              <div style={{
+                textAlign: 'center',
+                padding: '60px 20px',
+                color: '#6b7280'
+              }}>
+                <Building2 size={64} style={{ marginBottom: '16px', opacity: 0.5, margin: '0 auto 16px auto' }} />
+                <h3 style={{ margin: '0 0 8px 0', fontSize: '20px' }}>Select a Service Type</h3>
+                <p style={{ margin: 0 }}>Choose from Salon, Doctor, or Consultant to see available providers</p>
+              </div>
+            )}
+
+            {/* Businesses Grid - ONLY SHOW WHEN TYPE IS SELECTED */}
             {selectedType && (
               <div>
-                {businesses.length === 0 && <p>No businesses found for this type.</p>}
-                {businesses.map(biz => (
-                  <div key={biz._id} className="shop-card" style={{ border: '1px solid #eee', padding: 16, marginBottom: 12, borderRadius: 8 }}>
-                    <h3>{biz.businessName}</h3>
-                    <p>{biz.businessAddress}</p>
-                    <button onClick={() => navigate(`/salon/${biz._id}`)}>View Details</button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Show selected business details and booking form */}
-            {selectedBusiness && (
-              <div className="selected-business-info" style={{
-                backgroundColor: '#f0f9ff',
-                border: '1px solid #bfdbfe',
-                borderRadius: '8px',
-                padding: '16px',
-                marginBottom: '20px'
-              }}>
-                <h3 style={{ margin: 0, fontSize: '18px' }}>{selectedBusiness.businessName}</h3>
-                <p style={{ margin: '4px 0', color: '#6b7280' }}>{selectedBusiness.businessAddress}</p>
-                {/* Add more business details here if needed */}
-                <button onClick={() => setSelectedBusiness(null)} style={{ marginBottom: 16 }}>Back to List</button>
-                {/* Booking form below */}
-                <form onSubmit={handleSubmit} className="booking-form">
-                  <div className="customer-form-grid">
-                    <div className="customer-form-group">
-                      <label>
-                        <User size={16} />
-                        Full Name *
-                      </label>
-                      <input
-                        type="text"
-                        name="customerName"
-                        value={formData.customerName}
-                        onChange={handleInputChange}
-                        required
-                        placeholder="Enter your full name"
-                        className="customer-form-input"
-                      />
+                <h2 style={{
+                  fontSize: '24px',
+                  fontWeight: '600',
+                  color: '#1f2937',
+                  marginBottom: '24px',
+                  textAlign: 'center'
+                }}>
+                  Available {selectedType === 'salon' ? 'Salons' : 
+                            selectedType === 'doctor' ? 'Doctors' : 
+                            selectedType === 'consultant' ? 'Consultants' : 'Services'} ({businesses.length})
+                </h2>
+                
+                <div className="businesses-grid" style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
+                  gap: '20px',
+                  marginTop: '20px'
+                }}>
+                  {businesses.length === 0 ? (
+                    <div style={{
+                      gridColumn: '1 / -1',
+                      textAlign: 'center',
+                      padding: '40px',
+                      color: '#6b7280',
+                      backgroundColor: 'white',
+                      borderRadius: '12px',
+                      boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+                    }}>
+                      <Building2 size={48} style={{ marginBottom: '16px', opacity: 0.3 }} />
+                      <h3 style={{ margin: '0 0 8px 0', fontSize: '20px', color: '#374151' }}>
+                        No {selectedType === 'salon' ? 'Salons' : 
+                            selectedType === 'doctor' ? 'Doctors' : 
+                            selectedType === 'consultant' ? 'Consultants' : 'Businesses'} Found
+                      </h3>
+                      <p style={{ margin: 0, color: '#6b7280' }}>
+                        No registered {selectedType}s available at the moment.
+                      </p>
                     </div>
+                  ) : (
+                    businesses.map(biz => (
+                      <div key={biz._id} className="business-card" style={{
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '12px',
+                        overflow: 'hidden',
+                        backgroundColor: 'white',
+                        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                        transition: 'transform 0.2s, box-shadow 0.2s'
+                      }}>
+                        {/* Business Image */}
+                        <div style={{
+                          width: '100%',
+                          height: '200px',
+                          position: 'relative',
+                          overflow: 'hidden',
+                          backgroundColor: '#f9fafb'
+                        }}>
+                          {biz.imageUrl ? (
+                            <img
+                              src={`http://localhost:5000${biz.imageUrl}`}
+                              alt={biz.businessName}
+                              style={{
+                                width: '100%',
+                                height: '100%',
+                                objectFit: 'cover'
+                              }}
+                              onError={(e) => {
+                                e.target.style.display = 'none';
+                                e.target.nextSibling.style.display = 'flex';
+                              }}
+                            />
+                          ) : null}
+                          
+                          <div style={{
+                            width: '100%',
+                            height: '100%',
+                            display: biz.imageUrl ? 'none' : 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            backgroundColor: '#f3f4f6',
+                            color: '#9ca3af'
+                          }}>
+                            <Building2 size={48} />
+                          </div>
+                        </div>
 
-                    <div className="customer-form-group">
-                      <label>
-                        <Phone size={16} />
-                        Phone Number *
-                      </label>
-                      <input 
-                        type="tel" 
-                        name="customerPhone" 
-                        value={formData.customerPhone} 
-                        onChange={handleInputChange} 
-                        required 
-                        placeholder="+1 (555) 123-4567"
-                        className="customer-form-input"
-                      />
-                    </div>
+                        {/* Business Info */}
+                        <div style={{ padding: '20px' }}>
+                          <h3 style={{
+                            margin: '0 0 8px 0',
+                            fontSize: '18px',
+                            fontWeight: '600',
+                            color: '#1f2937'
+                          }}>
+                            {biz.businessName}
+                          </h3>
+                          
+                          {/* REPLACE the existing address div with this CLICKABLE one: */}
+                          <div 
+                            onClick={() => handleAddressClick(biz.businessAddress, biz.businessName)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              marginBottom: '6px',
+                              color: '#1e40af',
+                              fontSize: '14px',
+                              cursor: 'pointer',
+                              transition: 'color 0.2s',
+                              textDecoration: 'underline'
+                            }}
+                            onMouseOver={(e) => {
+                              e.currentTarget.style.color = '#1d4ed8';
+                            }}
+                            onMouseOut={(e) => {
+                              e.currentTarget.style.color = '#1e40af';
+                            }}
+                          >
+                            <MapPin size={14} style={{ marginRight: '6px', flexShrink: 0 }} />
+                            <span>{biz.businessAddress}</span>
+                            <Navigation size={12} style={{ marginLeft: '4px' }} />
+                          </div>
+                          
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            marginBottom: '6px',
+                            color: '#6b7280',
+                            fontSize: '14px'
+                          }}>
+                            <Phone size={14} style={{ marginRight: '6px' }} />
+                            <span>{biz.phone || 'Phone not available'}</span>
+                          </div>
+                          
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            marginBottom: '12px',
+                            color: '#6b7280',
+                            fontSize: '14px'
+                          }}>
+                            <Clock size={14} style={{ marginRight: '6px' }} />
+                            <span>{biz.workingHours || '9:00 AM - 7:00 PM'}</span>
+                          </div>
 
-                    <div className="customer-form-group customer-full-width">
-                      <label>
-                        <Mail size={16} />
-                        Business Email *
-                      </label>
-                      <input 
-                        type="email" 
-                        name="businessEmail" 
-                        value={formData.businessEmail} 
-                        onChange={handleInputChange} 
-                        required 
-                        placeholder="business@example.com"
-                        className="customer-form-input"
-                      />
-                    </div>
+                          {/* Services - Now clickable */}
+                          {biz.services && biz.services.length > 0 && (
+                            <div style={{ marginBottom: '16px' }}>
+                              <p style={{
+                                margin: '0 0 6px 0',
+                                fontSize: '13px',
+                                fontWeight: '600',
+                                color: '#4b5563'
+                              }}>
+                                Services Available (Click to Book):
+                              </p>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                {biz.services.map((service, idx) => (
+                                  <button
+                                    key={idx}
+                                    onClick={() => handleServiceSelect(biz, service)}
+                                    style={{
+                                      backgroundColor: '#eff6ff',
+                                      color: '#1e40af',
+                                      padding: '4px 8px',
+                                      borderRadius: '12px',
+                                      fontSize: '11px',
+                                      fontWeight: '500',
+                                      border: 'none',
+                                      cursor: 'pointer',
+                                      transition: 'all 0.2s',
+                                    }}
+                                    onMouseOver={(e) => {
+                                      e.target.style.backgroundColor = '#dbeafe';
+                                      e.target.style.transform = 'scale(1.05)';
+                                    }}
+                                    onMouseOut={(e) => {
+                                      e.target.style.backgroundColor = '#eff6ff';
+                                      e.target.style.transform = 'scale(1)';
+                                    }}
+                                  >
+                                    {service}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
 
-                    <div className="customer-form-group customer-full-width">
-                      <label>
-                        <Building2 size={16} />
-                        Service *
-                      </label>
-                      <select
-                        name="service"
-                        value={formData.service}
-                        onChange={handleInputChange}
-                        required
-                        disabled={services.length === 0}
-                        className="customer-form-select"
-                      >
-                        <option value="">Select a service</option>
-                        {services.map((service, index) => (
-                          <option key={index} value={service}>{service}</option>
-                        ))}
-                      </select>
-                      {serviceError && <span className="error-message" style={{ color: '#dc2626', fontSize: '14px' }}>{serviceError}</span>}
-                    </div>
-
-                    <div className="customer-form-group">
-                      <label>
-                        <Calendar size={16} />
-                        Preferred Date *
-                      </label>
-                      <input 
-                        type="date" 
-                        name="date" 
-                        value={formData.date} 
-                        onChange={handleInputChange} 
-                        min={getTodayDate()} 
-                        max={getMaxDate()} 
-                        required
-                        className="customer-form-input"
-                      />
-                    </div>
-
-                    <div className="customer-form-group">
-                      <label>
-                        <Clock size={16} />
-                        Preferred Time *
-                        {loadingBookedTimes && <Loader2 size={12} className="spinner inline-spinner" />}
-                      </label>
-                      <select
-                        name="time"
-                        value={formData.time}
-                        onChange={handleInputChange}
-                        required
-                        disabled={loadingBookedTimes || availableTimeSlots.length === 0}
-                        className="customer-form-select"
-                      >
-                        <option value="">
-                          {loadingBookedTimes ? 'Loading available times...' : 
-                           availableTimeSlots.length === 0 ? 'No available times' : 'Select time'}
-                        </option>
-                        {availableTimeSlots.map((slot, index) => {
-                          const isBooked = bookedTimes.includes(slot.value);
-                          return (
-                            <option
-                              key={index}
-                              value={slot.value}
-                              disabled={isBooked}
-                              style={isBooked ? { 
-                                color: '#ccc',
-                                backgroundColor: '#f5f5f5'
-                              } : {}}
+                          {/* Action Buttons */}
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button 
+                              onClick={() => navigate(`/salon/${biz._id}`)}
+                              style={{
+                                flex: 1,
+                                padding: '10px 16px',
+                                border: '1px solid #d1d5db',
+                                backgroundColor: 'white',
+                                color: '#374151',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                                fontSize: '14px'
+                              }}
                             >
-                              {slot.label} {isBooked ? '(Booked)' : ''}
-                            </option>
-                          );
-                        })}
-                      </select>
-                      {availableTimeSlots.length > 0 && formData.service && formData.date && (
-                        <small className="availability-info" style={{ color: '#6b7280', fontSize: '12px' }}>
-                          {availableTimeSlots.length - bookedTimes.length} slots available out of {availableTimeSlots.length}
-                        </small>
-                      )}
-                    </div>
-
-                    <div className="customer-form-group customer-full-width">
-                      <label>
-                        <FileText size={16} />
-                        Additional Notes
-                      </label>
-                      <textarea 
-                        name="notes"
-                        value={formData.notes}
-                        onChange={handleInputChange}
-                        placeholder="Any additional information or requests"
-                        className="customer-form-textarea"
-                      />
-                    </div>
-
-                    <div className="customer-form-group customer-full-width">
-                      <button 
-                        type="submit" 
-                        className="submit-button"
-                        disabled={isSubmitting || !isFormValid()}
-                        style={{ 
-                          backgroundColor: isSubmitting ? '#d1fae5' : '#10b981',
-                          color: isSubmitting ? '#6b7280' : '#fff',
-                          cursor: isSubmitting ? 'not-allowed' : 'pointer'
-                        }}
-                      >
-                        {isSubmitting ? <Loader2 size={16} className="spinner" /> : 'Book Appointment'}
-                      </button>
-                    </div>
-                  </div>
-                </form>
+                              View Details
+                            </button>
+                            {/* ADD this new Route button */}
+                            <button 
+                              onClick={() => openInNavigationApp(biz.businessAddress)}
+                              style={{
+                                padding: '10px 12px',
+                                border: '1px solid #10b981',
+                                backgroundColor: '#10b981',
+                                color: 'white',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                                fontSize: '14px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}
+                            >
+                              <Navigation size={14} />
+                              Route
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -755,21 +842,27 @@ const CustomerDashboard = () => {
                 backgroundColor: '#f9fafb', 
                 border: '1px solid #e5e7eb', 
                 borderRadius: '8px', 
-                padding: '16px',
+                padding: 16,
                 textAlign: 'center'
               }}>
                 <p style={{ color: '#6b7280' }}>You have no upcoming appointments.</p>
-                <Link to="/book" className="book-now-button" style={{ 
-                  display: 'inline-block', 
-                  marginTop: '12px', 
-                  padding: '10px 20px', 
-                  backgroundColor: '#10b981', 
-                  color: '#fff', 
-                  borderRadius: '8px',
-                  textDecoration: 'none'
-                }}>
-                  Book Now
-                </Link>
+                <button 
+                  onClick={() => setActiveTab('browse')}
+                  className="book-now-button" 
+                  style={{ 
+                    display: 'inline-block', 
+                    marginTop: '12px', 
+                    padding: '10px 20px', 
+                    backgroundColor: '#10b981', 
+                    color: '#fff', 
+                    borderRadius: '8px',
+                    textDecoration: 'none',
+                    border: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Browse Salons
+                </button>
               </div>
             ) : (
               <div className="appointments-list">
@@ -783,7 +876,6 @@ const CustomerDashboard = () => {
                     marginBottom: 16,
                     gap: 24
                   }}>
-                    {/* Service/Doctor Image (optional, if you have it) */}
                     <img
                       src={app.serviceImageUrl || "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=facearea&w=120&h=120"}
                       alt={app.service}
@@ -791,8 +883,23 @@ const CustomerDashboard = () => {
                     />
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 'bold', fontSize: 18 }}>{app.service}</div>
-                      <div style={{ color: '#6b7280', fontSize: 15 }}>
+                      {/* REPLACE existing address div with this CLICKABLE one: */}
+                      <div 
+                        onClick={() => handleAddressClick(app.businessAddress || 'N/A', app.businessName || 'Business')}
+                        style={{ 
+                          color: '#1e40af', 
+                          fontSize: 15,
+                          cursor: 'pointer',
+                          textDecoration: 'underline',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          margin: '4px 0'
+                        }}
+                      >
+                        <MapPin size={14} />
                         <b>Address:</b> {app.businessAddress || 'N/A'}
+                        <Navigation size={12} />
                       </div>
                       <div style={{ color: '#6b7280', fontSize: 15 }}>
                         <b>Date & Time:</b> {app.date} | {app.time}
@@ -801,11 +908,11 @@ const CustomerDashboard = () => {
                     <div>
                       {app.status === 'cancelled' && (
                         <button style={{ color: '#ef4444', border: '1px solid #ef4444', background: '#fff', borderRadius: 6, padding: '6px 12px' }}>
-                          Appointment cancelled
+                          Cancelled
                         </button>
                       )}
                       {app.status === 'pending' && (
-                        <button style={{ color: '#f59e42', border: '1px solid #f59e42', background: '#fff', borderRadius: 6, padding: '6px 12px' }}>
+                        <button style={{ color: '#f59e0b', border: '1px solid #f59e0b', background: '#fff', borderRadius: 6, padding: '6px 12px' }}>
                           Pending
                         </button>
                       )}
@@ -835,6 +942,81 @@ const CustomerDashboard = () => {
           </div>
         )}
       </div>
+
+      {/* Rating Modal */}
+      {ratingModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            padding: '24px',
+            borderRadius: '12px',
+            width: '400px',
+            maxWidth: '90vw'
+          }}>
+            <h3>Rate Your Experience</h3>
+            <p>How was your experience with {ratingModal.service}?</p>
+            <div style={{ display: 'flex', gap: '8px', margin: '16px 0' }}>
+              {[1, 2, 3, 4, 5].map(star => (
+                <button
+                  key={star}
+                  onClick={() => setUserRating(star)}
+                  style={{
+                    border: 'none',
+                    background: 'none',
+                    fontSize: '24px',
+                    cursor: 'pointer',
+                    color: star <= userRating ? '#fbbf24' : '#d1d5db'
+                  }}
+                >
+                  ★
+                </button>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => {
+                  setRatingModal(null);
+                  setUserRating(0);
+                }}
+                style={{
+                  padding: '8px 16px',
+                  border: '1px solid #d1d5db',
+                  backgroundColor: 'white',
+                  borderRadius: '6px',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRatingSubmit}
+                disabled={userRating === 0}
+                style={{
+                  padding: '8px 16px',
+                  border: 'none',
+                  backgroundColor: userRating > 0 ? '#10b981' : '#d1d5db',
+                  color: 'white',
+                  borderRadius: '6px',
+                  cursor: userRating > 0 ? 'pointer' : 'not-allowed'
+                }}
+              >
+                Submit Rating
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

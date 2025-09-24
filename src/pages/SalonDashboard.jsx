@@ -41,34 +41,65 @@ const SalonDashboard = () => {
   const [error, setError] = useState('');
   const [salonInfo, setSalonInfo] = useState(null);
   const [notifications, setNotifications] = useState(0);
+  
+  // ✅ Add these missing state variables for Edit Profile
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editFormData, setEditFormData] = useState({
+    businessName: '',
+    businessAddress: '',
+    workingHours: '',
+    phone: ''
+  });
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
 
   // Fetch salon info
   useEffect(() => {
     const fetchSalonInfo = async () => {
       try {
+        console.log('🔄 Fetching salon info for:', businessEmail);
+        
         const response = await axios.get(
           `http://localhost:5000/api/business/email/${encodeURIComponent(businessEmail)}`
         );
+        
+        console.log('📥 API Response:', response.data);
+        
         if (response.data.success && response.data.business) {
+          const businessData = response.data.business;
+          
+          console.log('🏢 Business Data:', businessData);
+          
           setSalonInfo({
-            _id: response.data.business._id,
-            name: response.data.business.businessName,
-            email: response.data.business.email,
-            address: response.data.business.address,
-            phone: response.data.business.phone,
-            services: response.data.business.services || [],
-            workingHours: response.data.business.workingHours || '9:00 AM - 7:00 PM'
+            _id: businessData._id,
+            name: businessData.businessName,
+            email: businessData.email,
+            address: businessData.businessAddress,
+            phone: businessData.phone,
+            services: businessData.services || [],
+            workingHours: businessData.workingHours || '9:00 AM - 7:00 PM',
+            imageUrl: businessData.imageUrl || null
+          });
+          
+          console.log('✅ Salon info updated:', {
+            name: businessData.businessName,
+            imageUrl: businessData.imageUrl
           });
         } else {
+          console.log('❌ API Error:', response.data.message);
           setError(response.data.message || 'Salon not found');
         }
       } catch (err) {
+        console.error('❌ Fetch salon info error:', err);
         setError('Error connecting to server. Please check your internet connection.');
       } finally {
         setLoading(false);
       }
     };
-    fetchSalonInfo();
+    
+    if (businessEmail) {
+      fetchSalonInfo();
+    }
   }, [businessEmail]);
 
   // Load appointments
@@ -154,6 +185,103 @@ const SalonDashboard = () => {
     }
   };
 
+  // ✅ Add missing functions for Edit Profile
+  // Open edit modal with current data
+  const openEditModal = () => {
+    setEditFormData({
+      businessName: salonInfo.name || '',
+      businessAddress: salonInfo.address || '',
+      workingHours: salonInfo.workingHours || '',
+      phone: salonInfo.phone || ''
+    });
+    if (salonInfo.imageUrl) {
+      setImagePreview(`http://localhost:5000${salonInfo.imageUrl}`);
+    } else {
+      setImagePreview(null);
+    }
+    setShowEditModal(true);
+  };
+
+  // Handle image selection
+  const handleImageSelect = (e) => {
+    const file = e.target.files[0];
+    setSelectedImage(file);
+    
+    if (file) {
+      // Validate file size (5MB max)
+      if (file.size > 5 * 1024 * 1024) {
+        alert('File size should be less than 5MB');
+        return;
+      }
+      
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        alert('Please select an image file');
+        return;
+      }
+      
+      const reader = new FileReader();
+      reader.onload = (e) => setImagePreview(e.target.result);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Handle profile update with image
+  const handleProfileUpdate = async (e) => {
+    e.preventDefault();
+    
+    try {
+      console.log('📤 Starting profile update...');
+      
+      const formData = new FormData();
+      formData.append('businessName', editFormData.businessName);
+      formData.append('businessAddress', editFormData.businessAddress);
+      formData.append('workingHours', editFormData.workingHours);
+      formData.append('phone', editFormData.phone);
+      
+      if (selectedImage) {
+        formData.append('businessImage', selectedImage);
+        console.log('🖼️ Image selected:', selectedImage.name);
+      }
+      
+      console.log('📤 Sending update request to:', `http://localhost:5000/api/business/update-profile/${salonInfo.email}`);
+      
+      const response = await fetch(`http://localhost:5000/api/business/update-profile/${salonInfo.email}`, {
+        method: 'PUT',
+        body: formData
+      });
+      
+      const result = await response.json();
+      console.log('📥 Update response:', result);
+      
+      if (result.success) {
+        // Update salon info with new data
+        setSalonInfo(prev => ({
+          ...prev,
+          name: result.business.businessName,
+          address: result.business.businessAddress,
+          workingHours: result.business.workingHours,
+          phone: result.business.phone,
+          imageUrl: result.business.imageUrl || prev.imageUrl
+        }));
+        
+        console.log('✅ Profile updated successfully');
+        
+        setShowEditModal(false);
+        setSelectedImage(null);
+        setImagePreview(null);
+        alert('Profile updated successfully!');
+        
+      } else {
+        console.log('❌ Update failed:', result.message);
+        alert(`Failed to update profile: ${result.message}`);
+      }
+    } catch (error) {
+      console.error('❌ Error updating profile:', error);
+      alert('Error updating profile. Please try again.');
+    }
+  };
+
   // Status helpers
   const getStatusIcon = (status) => {
     switch (status) {
@@ -219,6 +347,179 @@ const SalonDashboard = () => {
     URL.revokeObjectURL(url);
   };
 
+  // ✅ Add Edit Profile Modal Component
+  const EditProfileModal = () => (
+    <div className="modal-overlay" style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1000
+    }}>
+      <div className="modal-content" style={{
+        backgroundColor: 'white',
+        borderRadius: '8px',
+        padding: '24px',
+        width: '90%',
+        maxWidth: '500px',
+        maxHeight: '80vh',
+        overflow: 'auto'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h3>Edit Profile</h3>
+          <button 
+            onClick={() => setShowEditModal(false)}
+            style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer' }}
+          >
+            ×
+          </button>
+        </div>
+        
+        <form onSubmit={handleProfileUpdate}>
+          {/* Image Upload Section */}
+          <div className="form-group" style={{ marginBottom: '20px' }}>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+              Business Image:
+            </label>
+            <input 
+              type="file" 
+              accept="image/*"
+              onChange={handleImageSelect}
+              style={{ marginBottom: '10px' }}
+            />
+            {imagePreview && (
+              <div style={{ textAlign: 'center' }}>
+                <img 
+                  src={imagePreview} 
+                  alt="Preview" 
+                  style={{
+                    width: '150px', 
+                    height: '150px', 
+                    objectFit: 'cover',
+                    borderRadius: '8px',
+                    border: '2px solid #ddd'
+                  }} 
+                />
+              </div>
+            )}
+          </div>
+          
+          {/* Business Name */}
+          <div className="form-group" style={{ marginBottom: '15px' }}>
+            <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+              Business Name:
+            </label>
+            <input 
+              type="text" 
+              value={editFormData.businessName}
+              onChange={(e) => setEditFormData({...editFormData, businessName: e.target.value})}
+              style={{ 
+                width: '100%', 
+                padding: '8px', 
+                border: '1px solid #ddd', 
+                borderRadius: '4px' 
+              }}
+              required
+            />
+          </div>
+          
+          {/* Business Address */}
+          <div className="form-group" style={{ marginBottom: '15px' }}>
+            <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+              Address:
+            </label>
+            <input 
+              type="text" 
+              value={editFormData.businessAddress}
+              onChange={(e) => setEditFormData({...editFormData, businessAddress: e.target.value})}
+              style={{ 
+                width: '100%', 
+                padding: '8px', 
+                border: '1px solid #ddd', 
+                borderRadius: '4px' 
+              }}
+              required
+            />
+          </div>
+          
+          {/* Working Hours */}
+          <div className="form-group" style={{ marginBottom: '15px' }}>
+            <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+              Working Hours:
+            </label>
+            <input 
+              type="text" 
+              value={editFormData.workingHours}
+              onChange={(e) => setEditFormData({...editFormData, workingHours: e.target.value})}
+              placeholder="e.g., 9:00 AM - 7:00 PM"
+              style={{ 
+                width: '100%', 
+                padding: '8px', 
+                border: '1px solid #ddd', 
+                borderRadius: '4px' 
+              }}
+              required
+            />
+          </div>
+          
+          {/* Phone */}
+          <div className="form-group" style={{ marginBottom: '20px' }}>
+            <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+              Phone:
+            </label>
+            <input 
+              type="text" 
+              value={editFormData.phone}
+              onChange={(e) => setEditFormData({...editFormData, phone: e.target.value})}
+              style={{ 
+                width: '100%', 
+                padding: '8px', 
+                border: '1px solid #ddd', 
+                borderRadius: '4px' 
+              }}
+              required
+            />
+          </div>
+          
+          {/* Action Buttons */}
+          <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+            <button 
+              type="button" 
+              onClick={() => setShowEditModal(false)}
+              style={{
+                padding: '10px 20px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                background: 'white',
+                cursor: 'pointer'
+              }}
+            >
+              Cancel
+            </button>
+            <button 
+              type="submit"
+              style={{
+                padding: '10px 20px',
+                border: 'none',
+                borderRadius: '4px',
+                background: '#007bff',
+                color: 'white',
+                cursor: 'pointer'
+              }}
+            >
+              Update Profile
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+
   if (loading && !salonInfo) {
     return (
       <div className="loading-container">
@@ -253,7 +554,22 @@ const SalonDashboard = () => {
         <div className="header-content">
           <div className="header-left">
             <div className="logo-section">
-              <Scissors size={24} className="logo-icon" />
+              {/* ✅ Show salon image in header if available */}
+              {salonInfo?.imageUrl ? (
+                <img 
+                  src={`http://localhost:5000${salonInfo.imageUrl}`}
+                  alt={salonInfo.name}
+                  style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '50%',
+                    objectFit: 'cover',
+                    marginRight: '10px'
+                  }}
+                />
+              ) : (
+                <Scissors size={24} className="logo-icon" />
+              )}
               <div className="salon-info">
                 <h1 className="salon-name">{salonInfo?.name}</h1>
                 <p className="salon-tagline">Professional Salon Management</p>
@@ -358,7 +674,7 @@ const SalonDashboard = () => {
                         <Search size={20} />
                         <input
                           type="text"
-                       
+                          placeholder="Search appointments..."
                           value={searchTerm}
                           onChange={(e) => setSearchTerm(e.target.value)}
                           className="search-input"
@@ -450,7 +766,6 @@ const SalonDashboard = () => {
                                   </div>
                                 )}
                               </div>
-                              {/* Add this block to show action buttons for pending appointments */}
                               {appointment.status === 'pending' && (
                                 <div className="appointment-actions">
                                   <button
@@ -570,7 +885,8 @@ const SalonDashboard = () => {
                   <div className="settings-section">
                     <h3 className="section-title">Data Management</h3>
                     <div className="settings-actions">
-                      <button className="setting-btn">
+                      {/* ✅ Fix: Add onClick handler for Edit Profile button */}
+                      <button className="setting-btn" onClick={openEditModal}>
                         <Edit2 size={16} /> Edit Profile
                       </button>
                       <button className="setting-btn" onClick={loadAppointments}>
@@ -599,6 +915,9 @@ const SalonDashboard = () => {
           </div>
         </section>
       </main>
+
+      {/* ✅ Add Edit Profile Modal */}
+      {showEditModal && <EditProfileModal />}
     </div>
   );
 };

@@ -14,17 +14,14 @@ exports.signup = async (req, res) => {
     // If manager, create business with all details
     if (role === 'manager' && businessData) {
       const business = new Business({
-        businessName: businessData.businessName,
-        businessAddress: businessData.businessAddress,
-        services: businessData.services,
-        workingHours: businessData.workingHours,
-        specialization: businessData.specialization,
-        doctors: businessData.doctors,
-        courses: businessData.courses,
-        email,
-        phone,
-        owner: user._id,
-        businessType
+        businessName: businessData.businessName || name,
+        businessType: businessType,
+        businessAddress: businessData.businessAddress || 'Not specified',
+        phone: phone,
+        email: email,
+        workingHours: businessData.workingHours || '9:00 AM - 6:00 PM',
+        services: businessData.services || [],
+        owner: user._id // ✅ Add this line
       });
       await business.save();
     }
@@ -50,7 +47,8 @@ exports.login = async (req, res) => {
     let businessType = null;
     let businessName = null;
     if (role === 'manager') {
-      const business = await Business.findOne({ owner: user._id });
+      // ✅ Search by email instead of owner
+      const business = await Business.findOne({ email: user.email });
       businessType = business ? business.businessType : null;
       businessName = business ? business.businessName : null;
     }
