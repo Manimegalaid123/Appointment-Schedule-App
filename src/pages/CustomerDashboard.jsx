@@ -21,7 +21,61 @@ import { businessAPI, appointmentAPI } from '../utils/api';
 import './CustomerDashboard.css';
 import { useNavigate, Link } from 'react-router-dom';
 
+// ADD THIS REUSABLE COMPONENT HERE
+const RatingStars = ({ rating, totalRatings, size = 16 }) => {
+  const fullStars = Math.floor(rating);
+  const hasHalfStar = rating % 1 >= 0.5;
+  const emptyStars = 5 - Math.ceil(rating);
+  
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: '4px'
+    }}>
+      <div style={{ display: 'flex', color: '#fbbf24', fontSize: `${size}px` }}>
+        {'★'.repeat(fullStars)}
+        {hasHalfStar && '★'}
+        {'☆'.repeat(emptyStars)}
+      </div>
+      <span style={{ 
+        fontSize: `${size - 2}px`, 
+        fontWeight: '600', 
+        color: '#047857' 
+      }}>
+        {rating.toFixed(1)}
+      </span>
+      <span style={{ 
+        fontSize: `${size - 4}px`, 
+        color: '#6b7280' 
+      }}>
+        ({totalRatings})
+      </span>
+    </div>
+  );
+};
+
+// Add this component after your RatingStars component
+const DateWarning = ({ message }) => (
+  <div style={{
+    backgroundColor: '#fef2f2',
+    border: '1px solid #fecaca',
+    borderRadius: '8px',
+    padding: '12px',
+    margin: '8px 0',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px'
+  }}>
+    <span style={{ fontSize: '16px' }}>⚠️</span>
+    <span style={{ fontSize: '14px', color: '#dc2626', fontWeight: '500' }}>
+      {message}
+    </span>
+  </div>
+);
+
 const CustomerDashboard = () => {
+  // 1. State declarations
   const [customerName, setCustomerName] = useState('');
   const customerEmail = localStorage.getItem('email');
   const [formData, setFormData] = useState({
@@ -39,6 +93,7 @@ const CustomerDashboard = () => {
   const [isSuccess, setIsSuccess] = useState(false);
   const [serviceError, setServiceError] = useState('');
   const [appointments, setAppointments] = useState([]);
+  const [businesses, setBusinesses] = useState([]);
   const [activeTab, setActiveTab] = useState('browse');
   const [bookedTimes, setBookedTimes] = useState([]);
   const [bookingError, setBookingError] = useState('');
@@ -48,7 +103,6 @@ const CustomerDashboard = () => {
   const [showWorkingHours, setShowWorkingHours] = useState(false);
 
   // Add state for businesses and selected business
-  const [businesses, setBusinesses] = useState([]);
   const [selectedBusiness, setSelectedBusiness] = useState(null);
   const [selectedType, setSelectedType] = useState('');
   const [showBookingForm, setShowBookingForm] = useState(false);
@@ -58,6 +112,63 @@ const CustomerDashboard = () => {
 
   const navigate = useNavigate();
 
+  // 2. Utility functions (MOVE THESE UP)
+  const getTodayDate = () => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  };
+
+  const getMaxDate = () => {
+    const maxDate = new Date();
+    maxDate.setDate(maxDate.getDate() + 30);
+    return maxDate.toISOString().split('T')[0];
+  };
+
+  const isDateInPast = (dateString) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const selectedDate = new Date(dateString);
+    selectedDate.setHours(0, 0, 0, 0);
+    
+    return selectedDate < today;
+  };
+
+  const handleDateChange = (e) => {
+    const selectedDate = e.target.value;
+    
+    if (isDateInPast(selectedDate)) {
+      setBookingError('❌ Cannot book appointments for past dates. Please select today or a future date.');
+      setFormData(prev => ({ ...prev, date: '', time: '' }));
+      return;
+    }
+    
+    setBookingError('');
+    setFormData(prev => ({ ...prev, date: selectedDate, time: '' }));
+  };
+
+  const getAvailableTimeSlots = () => {
+    const allSlots = generateTimeSlots();
+    const workingHoursSlots = allSlots.filter(slot => 
+      isWithinWorkingHours(slot.value, workingHours.start, workingHours.end)
+    );
+    
+    // If booking for today, filter out past times
+    if (formData.date === getTodayDate()) {
+      const now = new Date();
+      const currentTime = now.getHours() * 60 + now.getMinutes();
+      
+      return workingHoursSlots.filter(slot => {
+        const [hours, minutes] = slot.value.split(':').map(num => parseInt(num, 10));
+        const slotTime = hours * 60 + minutes;
+        return slotTime > currentTime + 30; // Add 30 minutes buffer
+      });
+    }
+    
+    return workingHoursSlots;
+  };
+
+  // 3. useEffect hooks
   useEffect(() => {
     const fetchCustomerName = async () => {
       try {
@@ -76,8 +187,35 @@ const CustomerDashboard = () => {
     const fetchAppointments = async () => {
       try {
         const res = await axios.get(`http://localhost:5000/api/appointments/customer/${customerEmail}`);
-        setAppointments(res.data.appointments || []);
+        if (res.data.appointments) {
+          // FETCH BUSINESS DETAILS for each appointment
+          const appointmentsWithBusinessDetails = await Promise.all(
+            res.data.appointments.map(async (appointment) => {
+              try {
+                // Fetch business details using business email
+                const businessRes = await axios.get(`http://localhost:5000/api/businesses/email/${appointment.businessEmail}`);
+                if (businessRes.data.success) {
+                  return {
+                    ...appointment,
+                    businessName: businessRes.data.business.businessName,
+                    businessAddress: businessRes.data.business.businessAddress,
+                    businessPhone: businessRes.data.business.phone,
+                    workingHours: businessRes.data.business.workingHours
+                  };
+                }
+                return appointment;
+              } catch (error) {
+                console.error('Error fetching business details:', error);
+                return appointment;
+              }
+            })
+          );
+          setAppointments(appointmentsWithBusinessDetails);
+        } else {
+          setAppointments([]);
+        }
       } catch (err) {
+        console.error('Error fetching appointments:', err);
         setAppointments([]);
       }
     };
@@ -124,6 +262,7 @@ const CustomerDashboard = () => {
     fetchBookedTimes();
   }, [formData.businessEmail, formData.service, formData.date]);
 
+  // 4. Event handlers
   const handleInputChange = async (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -138,71 +277,13 @@ const CustomerDashboard = () => {
     }
   };
 
-  const fetchBusinessServices = async (email) => {
-    setServices([]);
-    setServiceError('');
-    setBusinessName('');
-    setWorkingHours({ start: '09:00', end: '19:00' });
-    setShowWorkingHours(false);
-
-    if (!email) return;
-
-    try {
-      const response = await businessAPI.getByEmail(email);
-      if (response.success && response.business) {
-        const business = response.business;
-
-        setServices(business.services || []);
-        setBusinessName(business.businessName || business.name || 'Business');
-
-        const normalizeTimeString = (str) => {
-          return str.replace(/([0-9])([AP]M)/gi, '$1 $2');
-        };
-
-        if (business.workingHours) {
-          const workingHoursStr = business.workingHours.trim();
-          console.log('Raw working hours:', workingHoursStr);
-
-          if (workingHoursStr.includes('-')) {
-            const [startRaw, endRaw] = workingHoursStr.split('-');
-            const startNorm = normalizeTimeString(startRaw.trim());
-            const endNorm = normalizeTimeString(endRaw.trim());
-            const start = convertTo24Hour(startNorm);
-            const end = convertTo24Hour(endNorm);
-
-            console.log('Converted working hours:', { start, end });
-            setWorkingHours({ start, end });
-            setShowWorkingHours(true);
-          } else {
-            setWorkingHours({ start: '09:00', end: '19:00' });
-            setShowWorkingHours(false);
-          }
-        } else {
-          setWorkingHours({ start: '09:00', end: '19:00' });
-          setShowWorkingHours(false);
-        }
-      } else {
-        setServiceError('Business not found or error fetching services.');
-        setServices([]);
-        setBusinessName('');
-        setWorkingHours({ start: '09:00', end: '19:00' });
-        setShowWorkingHours(false);
-      }
-    } catch (error) {
-      setServiceError('Business not found or error fetching services.');
-      setServices([]);
-      setBusinessName('');
-      setWorkingHours({ start: '09:00', end: '19:00' });
-      setShowWorkingHours(false);
-      console.error('Error fetching business:', error);
-    }
-  };
-
   const handleServiceSelect = (business, service) => {
     setSelectedBusiness(business);
     setFormData(prev => ({
       ...prev,
       businessEmail: business.email,
+      businessName: business.businessName,      // ADD THIS
+      businessAddress: business.businessAddress, // ADD THIS
       service: service,
       date: '',
       time: '',
@@ -221,6 +302,8 @@ const CustomerDashboard = () => {
       const response = await appointmentAPI.create({
         ...formData,
         customerEmail,
+        businessName: selectedBusiness?.businessName,     // ADD THIS
+        businessAddress: selectedBusiness?.businessAddress, // ADD THIS
         status: 'pending',
         createdAt: new Date().toISOString()
       });
@@ -380,40 +463,7 @@ const CustomerDashboard = () => {
     return slots;
   };
 
-  const allTimeSlots = generateTimeSlots();
-  
-  const availableTimeSlots = allTimeSlots.filter(slot => 
-    isWithinWorkingHours(slot.value, workingHours.start, workingHours.end)
-  );
-
-  const getTodayDate = () => new Date().toISOString().split('T')[0];
-  const getMaxDate = () => {
-    const d = new Date();
-    d.setMonth(d.getMonth() + 3);
-    return d.toISOString().split('T')[0];
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'accepted': return '#10b981';
-      case 'rejected': return '#ef4444';
-      case 'rescheduled': return '#3b82f6';
-      default: return '#f59e0b';
-    }
-  };
-
-  const formatTimeFor12Hour = (time24) => {
-    try {
-      return new Date(`2024-01-01T${time24}`).toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true
-      });
-    } catch (error) {
-      return time24;
-    }
-  };
-
+  // 3. useEffect hooks
   useEffect(() => {
     const fetchBusinesses = async () => {
       try {
@@ -423,15 +473,31 @@ const CustomerDashboard = () => {
         }
         const response = await axios.get(url);
         if (response.data.success) {
+          console.log('📊 Business data with ratings:', response.data.businesses);
+          
+          // Log each business's rating data for debugging
+          response.data.businesses.forEach((biz, idx) => {
+            console.log(`🏢 ${biz.businessName}:`, {
+              averageRating: biz.averageRating || 0,
+              totalRatings: biz.totalRatings || 0,
+              hasRatings: (biz.averageRating > 0),
+              ratingsArray: biz.ratings?.length || 0
+            });
+          });
+          
           setBusinesses(response.data.businesses);
         } else {
           setBusinesses([]);
         }
       } catch (error) {
+        console.log('Error fetching businesses:', error);
         setBusinesses([]);
       }
     };
-    fetchBusinesses();
+    
+    if (selectedType) {
+      fetchBusinesses();
+    }
   }, [selectedType]);
 
   const [showMapModal, setShowMapModal] = useState(false);
@@ -474,6 +540,22 @@ const CustomerDashboard = () => {
     }
     
     window.open(url, '_blank');
+  };
+
+  // Initialize rating fields for businesses - ADD THIS FUNCTION
+  const initializeRatingFields = () => {
+    fetch('http://localhost:5000/api/businesses/init-rating-fields', {
+      method: 'POST'
+    })
+    .then(res => res.json())
+    .then(data => {
+      console.log('Rating fields initialized:', data);
+      // Refresh the page after initialization
+      window.location.reload();
+    })
+    .catch(error => {
+      console.error('Error initializing rating fields:', error);
+    });
   };
 
   if (isSuccess) {
@@ -693,7 +775,7 @@ const CustomerDashboard = () => {
                             {biz.businessName}
                           </h3>
                           
-                          {/* REPLACE the existing address div with this CLICKABLE one: */}
+                          {/* Address */}
                           <div 
                             onClick={() => handleAddressClick(biz.businessAddress, biz.businessName)}
                             style={{
@@ -718,6 +800,7 @@ const CustomerDashboard = () => {
                             <Navigation size={12} style={{ marginLeft: '4px' }} />
                           </div>
                           
+                          {/* Phone */}
                           <div style={{
                             display: 'flex',
                             alignItems: 'center',
@@ -729,6 +812,7 @@ const CustomerDashboard = () => {
                             <span>{biz.phone || 'Phone not available'}</span>
                           </div>
                           
+                          {/* Working Hours */}
                           <div style={{
                             display: 'flex',
                             alignItems: 'center',
@@ -738,6 +822,66 @@ const CustomerDashboard = () => {
                           }}>
                             <Clock size={14} style={{ marginRight: '6px' }} />
                             <span>{biz.workingHours || '9:00 AM - 7:00 PM'}</span>
+                          </div>
+
+                          {/* Google-Style Rating Display */}
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            marginBottom: '12px',
+                            padding: '8px 0',
+                            borderBottom: '1px solid #f1f5f9'
+                          }}>
+                            {biz.averageRating && biz.averageRating > 0 ? (
+                              <>
+                                {/* Rating Number */}
+                                <span style={{ 
+                                  fontSize: '18px', 
+                                  fontWeight: '600', 
+                                  color: '#1f2937' 
+                                }}>
+                                  {parseFloat(biz.averageRating).toFixed(1)}
+                                </span>
+                                
+                                {/* Stars */}
+                                <div style={{ 
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  gap: '2px' 
+                                }}>
+                                  {[1, 2, 3, 4, 5].map(star => (
+                                    <span 
+                                      key={star}
+                                      style={{ 
+                                        color: star <= Math.round(biz.averageRating) ? '#fbbf24' : '#e5e7eb',
+                                        fontSize: '16px'
+                                      }}
+                                    >
+                                      ★
+                                    </span>
+                                  ))}
+                                </div>
+                                
+                                {/* Review Count */}
+                                <span style={{ 
+                                  fontSize: '14px', 
+                                  color: '#1e40af',
+                                  textDecoration: 'underline',
+                                  cursor: 'pointer'
+                                }}>
+                                  {biz.totalRatings || 0} {(biz.totalRatings === 1) ? 'review' : 'reviews'}
+                                </span>
+                              </>
+                            ) : (
+                              <span style={{ 
+                                fontSize: '14px', 
+                                color: '#6b7280',
+                                fontStyle: 'italic'
+                              }}>
+                                No reviews yet • Be the first to review
+                              </span>
+                            )}
                           </div>
 
                           {/* Services - Now clickable */}
@@ -833,105 +977,223 @@ const CustomerDashboard = () => {
         {activeTab === 'appointments' && (
           <div className="appointments-content">
             <div className="content-header">
-              <h2>My Appointments</h2>
-              <p>View and manage your upcoming appointments</p>
+              <h2 style={{ fontSize: '24px', fontWeight: '600', color: '#1f2937', marginBottom: '24px' }}>
+                My appointments
+              </h2>
             </div>
 
             {appointments.length === 0 ? (
               <div className="no-appointments" style={{ 
                 backgroundColor: '#f9fafb', 
                 border: '1px solid #e5e7eb', 
-                borderRadius: '8px', 
-                padding: 16,
+                borderRadius: '12px', 
+                padding: '40px',
                 textAlign: 'center'
               }}>
-                <p style={{ color: '#6b7280' }}>You have no upcoming appointments.</p>
+                <CalendarDays size={48} style={{ color: '#9ca3af', marginBottom: '16px' }} />
+                <h3 style={{ color: '#374151', marginBottom: '8px' }}>No appointments yet</h3>
+                <p style={{ color: '#6b7280', marginBottom: '20px' }}>Book your first appointment to get started</p>
                 <button 
                   onClick={() => setActiveTab('browse')}
-                  className="book-now-button" 
                   style={{ 
-                    display: 'inline-block', 
-                    marginTop: '12px', 
-                    padding: '10px 20px', 
-                    backgroundColor: '#10b981', 
+                    padding: '12px 24px', 
+                    backgroundColor: '#3b82f6', 
                     color: '#fff', 
                     borderRadius: '8px',
-                    textDecoration: 'none',
                     border: 'none',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '500'
                   }}
                 >
-                  Browse Salons
+                  Browse Services
                 </button>
               </div>
             ) : (
-              <div className="appointments-list">
+              <div className="appointments-list" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {appointments.map(app => (
                   <div key={app._id} style={{
                     display: 'flex',
                     alignItems: 'center',
-                    border: '1px solid #eee',
-                    borderRadius: 12,
-                    padding: 16,
-                    marginBottom: 16,
-                    gap: 24
+                    backgroundColor: 'white',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '12px',
+                    padding: '20px',
+                    gap: '20px',
+                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
                   }}>
-                    <img
-                      src={app.serviceImageUrl || "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=facearea&w=120&h=120"}
-                      alt={app.service}
-                      style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 8, background: '#f3f4f6' }}
-                    />
+                    {/* Professional Image */}
+                    <div style={{
+                      width: '80px',
+                      height: '80px',
+                      borderRadius: '12px',
+                      overflow: 'hidden',
+                      backgroundColor: '#f3f4f6',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}>
+                      {app.serviceImageUrl ? (
+                        <img
+                          src={app.serviceImageUrl}
+                          alt={app.service}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      ) : (
+                        <User size={32} style={{ color: '#9ca3af' }} />
+                      )}
+                    </div>
+
+                    {/* Main Content */}
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 'bold', fontSize: 18 }}>{app.service}</div>
-                      {/* REPLACE existing address div with this CLICKABLE one: */}
-                      <div 
-                        onClick={() => handleAddressClick(app.businessAddress || 'N/A', app.businessName || 'Business')}
-                        style={{ 
-                          color: '#1e40af', 
-                          fontSize: 15,
-                          cursor: 'pointer',
-                          textDecoration: 'underline',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          margin: '4px 0'
-                        }}
-                      >
-                        <MapPin size={14} />
-                        <b>Address:</b> {app.businessAddress || 'N/A'}
-                        <Navigation size={12} />
+                      {/* Business Name & Service - FIXED */}
+                      <h3 style={{ 
+                        margin: '0 0 4px 0', 
+                        fontSize: '18px', 
+                        fontWeight: '600', 
+                        color: '#1f2937' 
+                      }}>
+                        {app.businessName || 'Business Name Not Available'}
+                      </h3>
+                      <p style={{ 
+                        margin: '0 0 8px 0', 
+                        fontSize: '14px', 
+                        color: '#6b7280' 
+                      }}>
+                        {app.service}
+                      </p>
+
+                      {/* Address - FIXED */}
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        color: '#6b7280',
+                        fontSize: '14px',
+                        marginBottom: '8px'
+                      }}>
+                        <span style={{ fontWeight: '500' }}>Address:</span>
+                        {app.businessAddress && app.businessAddress !== 'Address not available' ? (
+                          <span 
+                            onClick={() => handleAddressClick(app.businessAddress, app.businessName)}
+                            style={{
+                              color: '#1e40af',
+                              cursor: 'pointer',
+                              textDecoration: 'underline'
+                            }}
+                          >
+                            {app.businessAddress}
+                          </span>
+                        ) : (
+                          <span style={{ color: '#ef4444' }}>Address not available</span>
+                        )}
                       </div>
-                      <div style={{ color: '#6b7280', fontSize: 15 }}>
-                        <b>Date & Time:</b> {app.date} | {app.time}
+
+                      {/* Date & Time - FIXED */}
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        color: '#6b7280',
+                        fontSize: '14px'
+                      }}>
+                        <span style={{ fontWeight: '500' }}>Date & Time:</span>
+                        <span>
+                          {new Date(app.date).toLocaleDateString('en-GB', { 
+                            day: '2-digit', 
+                            month: 'short', 
+                            year: 'numeric' 
+                          })} | {formatTimeFor12Hour(app.time)}
+                        </span>
                       </div>
                     </div>
-                    <div>
-                      {app.status === 'cancelled' && (
-                        <button style={{ color: '#ef4444', border: '1px solid #ef4444', background: '#fff', borderRadius: 6, padding: '6px 12px' }}>
-                          Cancelled
-                        </button>
-                      )}
+
+                    {/* Status & Actions - Same as before */}
+                    <div style={{ 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      alignItems: 'flex-end', 
+                      gap: '8px',
+                      minWidth: '120px'
+                    }}>
+                      {/* Status Badge */}
                       {app.status === 'pending' && (
-                        <button style={{ color: '#f59e0b', border: '1px solid #f59e0b', background: '#fff', borderRadius: 6, padding: '6px 12px' }}>
-                          Pending
-                        </button>
+                        <span style={{ 
+                          backgroundColor: '#fef3c7', 
+                          color: '#d97706', 
+                          padding: '6px 12px', 
+                          borderRadius: '20px', 
+                          fontSize: '12px', 
+                          fontWeight: '600'
+                        }}>
+                          PENDING
+                        </span>
                       )}
                       {app.status === 'accepted' && (
-                        <button style={{ color: '#10b981', border: '1px solid #10b981', background: '#fff', borderRadius: 6, padding: '6px 12px' }}>
-                          Accepted
-                        </button>
+                        <span style={{ 
+                          backgroundColor: '#d1fae5', 
+                          color: '#059669', 
+                          padding: '6px 12px', 
+                          borderRadius: '20px', 
+                          fontSize: '12px', 
+                          fontWeight: '600'
+                        }}>
+                          CONFIRMED
+                        </span>
                       )}
+                      {app.status === 'completed' && (
+                        <span style={{ 
+                          backgroundColor: '#dbeafe', 
+                          color: '#1d4ed8', 
+                          padding: '6px 12px', 
+                          borderRadius: '20px', 
+                          fontSize: '12px', 
+                          fontWeight: '600'
+                        }}>
+                          COMPLETED
+                        </span>
+                      )}
+                      {app.status === 'cancelled' && (
+                        <span style={{ 
+                          backgroundColor: '#fee2e2', 
+                          color: '#dc2626', 
+                          padding: '6px 12px', 
+                          borderRadius: '20px', 
+                          fontSize: '12px', 
+                          fontWeight: '600'
+                        }}>
+                          CANCELLED
+                        </span>
+                      )}
+
+                      {/* Rating Action */}
                       {app.status === 'completed' && !app.rating && (
                         <button
-                          style={{ color: '#6366f1', border: '1px solid #6366f1', background: '#fff', borderRadius: 6, padding: '6px 12px' }}
                           onClick={() => setRatingModal(app)}
+                          style={{
+                            backgroundColor: '#eff6ff',
+                            border: '1px solid #3b82f6',
+                            color: '#3b82f6',
+                            padding: '6px 12px',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            fontWeight: '500'
+                          }}
                         >
-                          Rate this service
+                          Rate Service
                         </button>
                       )}
+                      
                       {app.status === 'completed' && app.rating && (
-                        <div>
-                          Your Rating: {'★'.repeat(app.rating)}{'☆'.repeat(5 - app.rating)} ({app.rating}/5)
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: '14px', color: '#fbbf24', marginBottom: '2px' }}>
+                            {'★'.repeat(app.rating)}{'☆'.repeat(5 - app.rating)}
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#059669', fontWeight: '500' }}>
+                            Rated {app.rating}/5
+                          </div>
                         </div>
                       )}
                     </div>
@@ -959,66 +1221,185 @@ const CustomerDashboard = () => {
         }}>
           <div style={{
             backgroundColor: 'white',
-            padding: '24px',
-            borderRadius: '12px',
-            width: '400px',
+            padding: '32px',
+            borderRadius: '16px',
+            width: '450px',
             maxWidth: '90vw'
           }}>
-            <h3>Rate Your Experience</h3>
-            <p>How was your experience with {ratingModal.service}?</p>
-            <div style={{ display: 'flex', gap: '8px', margin: '16px 0' }}>
-              {[1, 2, 3, 4, 5].map(star => (
-                <button
-                  key={star}
-                  onClick={() => setUserRating(star)}
-                  style={{
-                    border: 'none',
-                    background: 'none',
-                    fontSize: '24px',
-                    cursor: 'pointer',
-                    color: star <= userRating ? '#fbbf24' : '#d1d5db'
-                  }}
-                >
-                  ★
-                </button>
-              ))}
+            {/* Completion Confirmation */}
+            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+              <div style={{
+                backgroundColor: '#f0fdf4',
+                border: '2px solid #10b981',
+                borderRadius: '50%',
+                width: '60px',
+                height: '60px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 16px auto'
+              }}>
+                <span style={{ fontSize: '24px' }}>✅</span>
+              </div>
+              <h2 style={{ margin: '0 0 8px 0', color: '#1f2937' }}>Service Completed!</h2>
+              <p style={{ margin: 0, color: '#6b7280' }}>
+                How was your experience with <strong>{ratingModal.service}</strong>?
+              </p>
             </div>
-            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+
+            {/* Service Details */}
+            <div style={{
+              backgroundColor: '#f9fafb',
+              padding: '16px',
+              borderRadius: '12px',
+              marginBottom: '24px',
+              border: '1px solid #e5e7eb'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <img
+                  src={ratingModal.serviceImageUrl || "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=facearea&w=60&h=60"}
+                  alt={ratingModal.service}
+                  style={{ width: 50, height: 50, borderRadius: '8px', objectFit: 'cover' }}
+                />
+                <div style={{ flex: 1 }}>
+                  <h4 style={{ margin: '0 0 4px 0', fontSize: '16px', color: '#1f2937' }}>
+                    {ratingModal.service}
+                  </h4>
+                  <p style={{ margin: 0, fontSize: '14px', color: '#6b7280' }}>
+                    📅 {ratingModal.date} | ⏰ {ratingModal.time}
+                  </p>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#059669', fontWeight: '600' }}>
+                    ✅ Service completed successfully
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Rating Stars */}
+            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+              <p style={{ margin: '0 0 12px 0', fontWeight: '600', color: '#374151' }}>
+                Rate your overall experience:
+              </p>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginBottom: '8px' }}>
+                {[1, 2, 3, 4, 5].map(star => (
+                  <button
+                    key={star}
+                    onClick={() => setUserRating(star)}
+                    style={{
+                      border: 'none',
+                      background: 'none',
+                      fontSize: '32px',
+                      cursor: 'pointer',
+                      color: star <= userRating ? '#fbbf24' : '#d1d5db',
+                      transition: 'all 0.2s',
+                      transform: star <= userRating ? 'scale(1.1)' : 'scale(1)'
+                    }}
+                  >
+                    ★
+                  </button>
+                ))}
+              </div>
+              <p style={{ margin: 0, fontSize: '14px', color: '#6b7280', fontWeight: '500' }}>
+                {userRating === 1 && '😞 Poor - Service needs improvement'}
+                {userRating === 2 && '😐 Fair - Below expectations'}
+                {userRating === 3 && '😊 Good - Satisfactory service'}
+                {userRating === 4 && '😃 Very Good - Great experience'}
+                {userRating === 5 && '🤩 Excellent - Outstanding service!'}
+                {userRating === 0 && 'Click on stars to rate'}
+              </p>
+            </div>
+
+            {/* Helper Text */}
+            <div style={{
+              backgroundColor: '#eff6ff',
+              padding: '12px',
+              borderRadius: '8px',
+              marginBottom: '24px',
+              border: '1px solid #bfdbfe'
+            }}>
+              <p style={{ margin: 0, fontSize: '12px', color: '#1e40af', textAlign: 'center' }}>
+                💡 Your rating helps other customers and improves service quality
+              </p>
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
               <button
                 onClick={() => {
                   setRatingModal(null);
                   setUserRating(0);
                 }}
                 style={{
-                  padding: '8px 16px',
+                  padding: '12px 24px',
                   border: '1px solid #d1d5db',
                   backgroundColor: 'white',
-                  borderRadius: '6px',
-                  cursor: 'pointer'
+                  color: '#374151',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '500'
                 }}
               >
-                Cancel
+                Maybe Later
               </button>
               <button
                 onClick={handleRatingSubmit}
                 disabled={userRating === 0}
                 style={{
-                  padding: '8px 16px',
+                  padding: '12px 24px',
                   border: 'none',
                   backgroundColor: userRating > 0 ? '#10b981' : '#d1d5db',
                   color: 'white',
-                  borderRadius: '6px',
-                  cursor: userRating > 0 ? 'pointer' : 'not-allowed'
+                  borderRadius: '8px',
+                  cursor: userRating > 0 ? 'pointer' : 'not-allowed',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  transition: 'background-color 0.2s'
                 }}
               >
-                Submit Rating
+                {userRating > 0 ? `Submit ${userRating}-Star Rating` : 'Select Rating First'}
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Add this helpful message near your date input */}
+      <div style={{
+        backgroundColor: '#eff6ff',
+        border: '1px solid #bfdbfe',
+        borderRadius: '8px',
+        padding: '12px',
+        margin: '8px 0',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px'
+      }}>
+        <span style={{ fontSize: '16px' }}>💡</span>
+        <span style={{ fontSize: '14px', color: '#1e40af' }}>
+          {formData.date === getTodayDate() 
+            ? 'Booking for today - only future time slots are available'
+            : 'Select your preferred date and time for the appointment'
+          }
+        </span>
+      </div>
     </div>
   );
+};
+
+// Add this function after your other utility functions
+const formatTimeFor12Hour = (time24) => {
+  try {
+    if (!time24) return '';
+    const [hours, minutes] = time24.split(':');
+    const hour = parseInt(hours, 10);
+    const minute = parseInt(minutes, 10);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const hour12 = hour % 12 || 12;
+    return `${hour12}:${minute.toString().padStart(2, '0')} ${ampm}`;
+  } catch (error) {
+    return time24;
+  }
 };
 
 export default CustomerDashboard;

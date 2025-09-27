@@ -520,6 +520,33 @@ const SalonDashboard = () => {
     </div>
   );
 
+  // Add this function after your existing functions (around line 160):
+
+  const handleCompleteService = async (appointmentId) => {
+    const confirmed = confirm('Mark this service as completed? Customer will be able to rate after this.');
+    if (!confirmed) return;
+    
+    try {
+      const response = await axios.put(`http://localhost:5000/api/appointments/${appointmentId}/complete`);
+      if (response.data.success) {
+        // Update appointments list
+        setAppointments(prev =>
+          prev.map(apt =>
+            apt._id === appointmentId
+              ? { ...apt, status: 'completed', completedAt: new Date().toISOString() }
+              : apt
+          )
+        );
+        alert('Service marked as completed! Customer can now rate.');
+      } else {
+        alert('Failed to complete: ' + response.data.message);
+      }
+    } catch (error) {
+      console.error('Error completing service:', error);
+      alert('Error completing service');
+    }
+  };
+
   if (loading && !salonInfo) {
     return (
       <div className="loading-container">
@@ -792,6 +819,50 @@ const SalonDashboard = () => {
                                   >
                                     <RefreshCw size={16} /> Reschedule
                                   </button>
+                                </div>
+                              )}
+                              {appointment.status === 'accepted' && (
+                                <button
+                                  onClick={() => handleCompleteService(appointment._id)}
+                                  style={{
+                                    backgroundColor: '#10b981',
+                                    color: 'white',
+                                    border: 'none',
+                                    padding: '8px 16px',
+                                    borderRadius: '6px',
+                                    fontSize: '14px',
+                                    cursor: 'pointer',
+                                    marginTop: '8px',
+                                    width: '100%',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '6px'
+                                  }}
+                                >
+                                  ✅ Mark Service Complete
+                                </button>
+                              )}
+                              {appointment.status === 'completed' && (
+                                <div style={{
+                                  backgroundColor: '#f0fdf4',
+                                  border: '2px solid #10b981',
+                                  padding: '12px',
+                                  borderRadius: '8px',
+                                  textAlign: 'center',
+                                  marginTop: '8px'
+                                }}>
+                                  <div style={{ fontSize: '14px', fontWeight: '600', color: '#059669', marginBottom: '4px' }}>
+                                    🎉 SERVICE COMPLETED
+                                  </div>
+                                  <div style={{ fontSize: '12px', color: '#047857' }}>
+                                    Customer can now rate this service
+                                  </div>
+                                  {appointment.completedAt && (
+                                    <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '4px' }}>
+                                      Completed on {new Date(appointment.completedAt).toLocaleDateString()}
+                                    </div>
+                                  )}
                                 </div>
                               )}
                             </div>

@@ -9,9 +9,34 @@ const BusinessSchema = new mongoose.Schema({
   password: { type: String, required: true },
   workingHours: { type: String, required: true },
   imageUrl: { type: String },
-  services: [String]
+  services: [String],
+  
+  // ADD THESE RATING FIELDS - MISSING IN YOUR MODEL
+  averageRating: { type: Number, default: 0, min: 0, max: 5 },
+  totalRatings: { type: Number, default: 0 },
+  ratings: [{
+    appointmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Appointment' },
+    rating: { type: Number, required: true, min: 1, max: 5 },
+    customerId: { type: String, required: true },
+    customerName: { type: String },
+    service: { type: String },
+    createdAt: { type: Date, default: Date.now }
+  }]
 }, {
   timestamps: true
 });
+
+// Method to calculate average rating
+BusinessSchema.methods.calculateAverageRating = function() {
+  if (this.ratings.length === 0) {
+    this.averageRating = 0;
+    this.totalRatings = 0;
+  } else {
+    const total = this.ratings.reduce((sum, rating) => sum + rating.rating, 0);
+    this.averageRating = Math.round((total / this.ratings.length) * 10) / 10;
+    this.totalRatings = this.ratings.length;
+  }
+  return this.save();
+};
 
 module.exports = mongoose.model('Business', BusinessSchema);
