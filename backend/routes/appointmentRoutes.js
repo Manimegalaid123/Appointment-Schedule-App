@@ -117,10 +117,10 @@ router.post('/update-status/:id', async (req, res) => {
   }
 });
 
-// FIXED: Get booked times - moved to correct path
+// Get booked times
 router.get('/booked-times/check', appointmentController.getBookedTimes);
 
-// CREATE: New endpoint to create appointment with business logic
+// Create appointment with business logic
 router.post('/create', async (req, res) => {
   try {
     const { 
@@ -181,8 +181,8 @@ router.post('/create', async (req, res) => {
       customerName: customerName,
       customerEmail: customerEmail,
       businessEmail: businessEmail,
-      businessName: business.businessName,      // AUTOMATICALLY FETCHED
-      businessAddress: business.businessAddress, // AUTOMATICALLY FETCHED
+      businessName: business.businessName,
+      businessAddress: business.businessAddress,
       service: service,
       date: date,
       time: time,
@@ -215,279 +215,241 @@ router.post('/create', async (req, res) => {
   }
 });
 
-// REPLACE your rating route in appointmentRoutes.js with this complete version
-router.post('/rate', async (req, res) => {
+// Complete appointment route
+router.put('/:id/complete', async (req, res) => {
   try {
-    const { appointmentId, rating } = req.body;
+    const appointmentId = req.params.id;
     
-    console.log('🌟 Rating submission:', { appointmentId, rating });
+    console.log('🎯 Marking appointment as complete:', appointmentId);
     
-    // Validate input
-    if (!appointmentId || !rating || rating < 1 || rating > 5) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Invalid appointment ID or rating' 
+    const updatedAppointment = await Appointment.findByIdAndUpdate(
+      appointmentId,
+      { 
+        status: 'completed',
+        completedAt: new Date(),
+        updatedAt: new Date()
+      },
+      { 
+        new: true,
+        runValidators: false
+      }
+    );
+    
+    if (!updatedAppointment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Appointment not found'
       });
     }
     
-    // Find and update appointment
-    const appointment = await Appointment.findByIdAndUpdate(
+    console.log('✅ Appointment completed successfully:', updatedAppointment._id);
+    
+    res.json({
+      success: true,
+      message: 'Service marked as completed successfully',
+      appointment: updatedAppointment
+    });
+    
+  } catch (error) {
+    console.error('❌ Error completing appointment:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to complete service: ' + error.message
+    });
+  }
+});
+
+// Rate appointment
+router.post('/rate', async (req, res) => {
+  try {
+    const { appointmentId, rating, comment } = req.body;
+    
+    console.log('📊 Rating submission request:', { appointmentId, rating, comment });
+    
+    if (!appointmentId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Appointment ID is required'
+      });
+    }
+    
+    if (!rating || rating < 1 || rating > 5) {
+      return res.status(400).json({
+        success: false,
+        message: 'Rating must be between 1 and 5'
+      });
+    }
+    
+    const appointment = await Appointment.findById(appointmentId);
+    
+    if (!appointment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Appointment not found'
+      });
+    }
+    
+    if (appointment.status !== 'completed') {
+      return res.status(400).json({
+        success: false,
+        message: 'Only completed appointments can be rated'
+      });
+    }
+    
+    // Check if already rated - handle both number and object ratings
+    if (appointment.rating) {
+      if (typeof appointment.rating === 'number' || 
+          (typeof appointment.rating === 'object' && appointment.rating.rating)) {
+        return res.status(400).json({
+          success: false,
+          message: 'This appointment has already been rated'
+        });
+      }
+    }
+    
+    // Update appointment with rating - save as number for compatibility
+    const updatedAppointment = await Appointment.findByIdAndUpdate(
       appointmentId,
-      { rating: rating },
+      {
+        $set: {
+          rating: parseInt(rating), // Save as number for easier querying
+          ratedAt: new Date()
+        }
+      },
       { new: true }
     );
     
-    if (!appointment) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Appointment not found' 
-      });
-    }
+    console.log('✅ Rating saved successfully:', updatedAppointment.rating);
     
-    console.log('✅ Appointment rating updated');
-    console.log('📧 Business email:', appointment.businessEmail);
-    
-    // Update business rating - THIS IS THE KEY PART
-    try {
-      const business = await Business.findOne({ email: appointment.businessEmail });
-      if (business) {
-        console.log(`📍 Found business: ${business.businessName}`);
-        
-        // Initialize ratings array if it doesn't exist
-        if (!business.ratings) {
-          business.ratings = [];
-        }
-        
-        // Check if rating already exists for this appointment
-        const existingRatingIndex = business.ratings.findIndex(
-          r => r.appointmentId && r.appointmentId.toString() === appointmentId
-        );
-        
-        if (existingRatingIndex >= 0) {
-          // Update existing rating
-          console.log('🔄 Updating existing rating');
-          business.ratings[existingRatingIndex].rating = rating;
-        } else {
-          // Add new rating
-          console.log('➕ Adding new rating');
-          business.ratings.push({
-            appointmentId: appointmentId,
-            rating: rating,
-            customerId: appointment.customerEmail,
-            customerName: appointment.customerName || 'Customer',
-            service: appointment.service,
-            createdAt: new Date()
-          });
-        }
-        
-        // Calculate new average rating
-        const totalRating = business.ratings.reduce((sum, r) => sum + r.rating, 0);
-        business.averageRating = Math.round((totalRating / business.ratings.length) * 10) / 10;
-        business.totalRatings = business.ratings.length;
-        
-        console.log('🧮 Calculated ratings:', {
-          totalRating,
-          ratingsCount: business.ratings.length,
-          averageRating: business.averageRating,
-          totalRatings: business.totalRatings
-        });
-        
-        await business.save();
-        
-        console.log('🎉 Business rating updated successfully:', {
-          businessName: business.businessName,
-          newAverageRating: business.averageRating,
-          totalRatings: business.totalRatings
-        });
-        
-        // Verify the save worked
-        const verifyBusiness = await Business.findOne({ email: appointment.businessEmail });
-        console.log('✅ Verification - Business rating after save:', {
-          averageRating: verifyBusiness.averageRating,
-          totalRatings: verifyBusiness.totalRatings
-        });
-        
-      } else {
-        console.log('❌ Business not found with email:', appointment.businessEmail);
-      }
-    } catch (businessError) {
-      console.log('⚠️ Business rating update failed:', businessError.message);
-      console.error(businessError);
-    }
-    
-    res.json({ 
-      success: true, 
-      message: 'Rating submitted successfully'
+    res.json({
+      success: true,
+      message: 'Rating submitted successfully',
+      appointment: updatedAppointment
     });
     
   } catch (error) {
     console.error('❌ Error submitting rating:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error: ' + error.message 
+    res.status(500).json({
+      success: false,
+      message: 'Failed to submit rating: ' + error.message
     });
   }
 });
 
-// Complete appointment route - ADD THIS
-router.put('/:id/complete', async (req, res) => {
+// SINGLE RATINGS ROUTE - This handles all rating queries
+router.get('/ratings/:businessEmail', async (req, res) => {
   try {
-    const appointment = await Appointment.findById(req.params.id);
-    if (!appointment) {
-      return res.status(404).json({ success: false, message: 'Appointment not found' });
-    }
+    const { businessEmail } = req.params;
+    console.log('⭐ Fetching ratings for:', businessEmail);
     
-    // Only allow completion if appointment is accepted
-    if (appointment.status !== 'accepted') {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Only accepted appointments can be marked as completed' 
+    // Get all appointments with ratings (both number and object format)
+    const appointments = await Appointment.find({
+      businessEmail: businessEmail,
+      status: 'completed',
+      $or: [
+        { rating: { $exists: true, $ne: null, $gte: 1 } }, // Number format
+        { 'rating.rating': { $exists: true, $gte: 1 } }    // Object format
+      ]
+    }).sort({ createdAt: -1 });
+
+    console.log(`📊 Found ${appointments.length} rated appointments`);
+
+    if (appointments.length === 0) {
+      return res.json({
+        success: true,
+        statistics: {
+          averageRating: 0,
+          totalRatings: 0,
+          ratingBreakdown: [0, 0, 0, 0, 0]
+        },
+        recentReviews: [],
+        allReviews: []
       });
     }
-    
-    appointment.status = 'completed';
-    appointment.completedAt = new Date();
-    appointment.updatedAt = new Date();
-    await appointment.save();
-    
-    res.json({ success: true, appointment });
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
 
-// Add this debug route to appointmentRoutes.js
-router.get('/debug/:email', async (req, res) => {
-  try {
-    const appointments = await Appointment.find({ customerEmail: req.params.email });
-    console.log('=== APPOINTMENT DEBUG ===');
-    appointments.forEach((app, idx) => {
-      console.log(`Appointment ${idx}:`, {
-        id: app._id,
-        businessName: app.businessName,
-        businessAddress: app.businessAddress,
-        businessEmail: app.businessEmail,
-        service: app.service
-      });
-    });
-    res.json({ appointments });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Add this one-time sync route to appointmentRoutes.js
-router.post('/sync-existing-ratings', async (req, res) => {
-  try {
-    // Find all appointments with ratings
-    const ratedAppointments = await Appointment.find({ 
-      rating: { $exists: true, $ne: null, $gte: 1 } 
-    });
+    // Calculate statistics - handle both rating formats
+    let totalRatingPoints = 0;
+    let validRatings = 0;
     
-    console.log(`📊 Found ${ratedAppointments.length} rated appointments`);
-    
-    let syncedBusinesses = 0;
-    
-    for (let appointment of ratedAppointments) {
-      console.log(`🔄 Processing appointment ${appointment._id} with rating ${appointment.rating}`);
+    appointments.forEach(apt => {
+      let ratingValue;
       
-      const business = await Business.findOne({ email: appointment.businessEmail });
-      if (business) {
-        console.log(`📍 Found business: ${business.businessName}`);
-        
-        // Initialize ratings array if it doesn't exist
-        if (!business.ratings) {
-          business.ratings = [];
-        }
-        
-        // Check if rating already exists for this appointment
-        const existingRatingIndex = business.ratings.findIndex(
-          r => r.appointmentId && r.appointmentId.toString() === appointment._id.toString()
-        );
-        
-        if (existingRatingIndex === -1) {
-          // Add rating if it doesn't exist
-          business.ratings.push({
-            appointmentId: appointment._id,
-            rating: appointment.rating,
-            customerId: appointment.customerEmail,
-            customerName: appointment.customerName || 'Customer',
-            service: appointment.service,
-            createdAt: appointment.createdAt || new Date()
-          });
-          
-          console.log(`➕ Added rating ${appointment.rating} for ${appointment.service}`);
-        }
-        
-        // Recalculate average rating
-        const totalRating = business.ratings.reduce((sum, r) => sum + r.rating, 0);
-        business.averageRating = Math.round((totalRating / business.ratings.length) * 10) / 10;
-        business.totalRatings = business.ratings.length;
-        
-        await business.save();
-        syncedBusinesses++;
-        
-        console.log(`✅ ${business.businessName} updated - Average: ${business.averageRating}, Total: ${business.totalRatings}`);
+      // Handle both number and object rating formats
+      if (typeof apt.rating === 'number') {
+        ratingValue = apt.rating;
+      } else if (apt.rating && apt.rating.rating) {
+        ratingValue = apt.rating.rating;
       }
-    }
-    
-    res.json({
-      success: true,
-      message: `Synced ratings for ${syncedBusinesses} businesses`,
-      processedAppointments: ratedAppointments.length,
-      syncedBusinesses
+      
+      if (!isNaN(ratingValue) && ratingValue >= 1 && ratingValue <= 5) {
+        totalRatingPoints += ratingValue;
+        validRatings++;
+      }
     });
-    
-  } catch (error) {
-    console.error('❌ Error syncing ratings:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
 
-// Add this to appointmentRoutes.js to see what ratings exist
-router.get('/debug-all-ratings', async (req, res) => {
-  try {
-    console.log('🔍 Checking all appointments with ratings...');
-    
-    const allAppointments = await Appointment.find({});
-    console.log(`📋 Total appointments: ${allAppointments.length}`);
-    
-    const ratedAppointments = await Appointment.find({
-      rating: { $exists: true, $ne: null }
-    });
-    console.log(`⭐ Appointments with ratings: ${ratedAppointments.length}`);
-    
-    const appointmentsByBusiness = {};
-    
-    ratedAppointments.forEach(app => {
-      if (!appointmentsByBusiness[app.businessEmail]) {
-        appointmentsByBusiness[app.businessEmail] = [];
+    const averageRating = validRatings > 0 ? 
+      Number((totalRatingPoints / validRatings).toFixed(1)) : 0;
+
+    // Rating breakdown
+    const ratingBreakdown = [0, 0, 0, 0, 0];
+    appointments.forEach(apt => {
+      let ratingValue;
+      
+      if (typeof apt.rating === 'number') {
+        ratingValue = apt.rating;
+      } else if (apt.rating && apt.rating.rating) {
+        ratingValue = apt.rating.rating;
       }
-      appointmentsByBusiness[app.businessEmail].push({
-        service: app.service,
-        rating: app.rating,
-        customerEmail: app.customerEmail,
-        date: app.date
-      });
+      
+      if (!isNaN(ratingValue) && ratingValue >= 1 && ratingValue <= 5) {
+        ratingBreakdown[ratingValue - 1]++;
+      }
     });
-    
-    console.log('📊 Ratings by business:');
-    Object.keys(appointmentsByBusiness).forEach(businessEmail => {
-      const ratings = appointmentsByBusiness[businessEmail];
-      const avg = ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length;
-      console.log(`   ${businessEmail}: ${ratings.length} ratings, avg: ${avg.toFixed(1)}`);
-    });
-    
-    res.json({
+
+    // Build response
+    const response = {
       success: true,
-      totalAppointments: allAppointments.length,
-      ratedAppointments: ratedAppointments.length,
-      ratingsByBusiness: appointmentsByBusiness
-    });
-    
+      statistics: {
+        averageRating: averageRating,
+        totalRatings: validRatings,
+        ratingBreakdown: ratingBreakdown
+      },
+      recentReviews: appointments.slice(0, 10).map(apt => ({
+        id: apt._id,
+        customerName: apt.customerName || 'Customer',
+        customerInitial: (apt.customerName || 'C').charAt(0).toUpperCase(),
+        rating: typeof apt.rating === 'number' ? apt.rating : apt.rating?.rating || 0,
+        service: apt.service,
+        appointmentDate: apt.date,
+        appointmentTime: apt.time,
+        ratedAt: apt.ratedAt || apt.updatedAt || apt.createdAt,
+        customerPhone: apt.customerPhone || 'N/A',
+        notes: apt.notes || '',
+        daysAgo: Math.floor((Date.now() - new Date(apt.ratedAt || apt.updatedAt || apt.createdAt)) / (1000 * 60 * 60 * 24))
+      })),
+      allReviews: appointments.map(apt => ({
+        id: apt._id,
+        customerName: apt.customerName || 'Customer',
+        customerInitial: (apt.customerName || 'C').charAt(0).toUpperCase(),
+        rating: typeof apt.rating === 'number' ? apt.rating : apt.rating?.rating || 0,
+        service: apt.service,
+        appointmentDate: apt.date,
+        appointmentTime: apt.time,
+        ratedAt: apt.ratedAt || apt.updatedAt || apt.createdAt,
+        customerPhone: apt.customerPhone || 'N/A',
+        notes: apt.notes || ''
+      }))
+    };
+
+    console.log('📈 Final statistics:', response.statistics);
+    res.json(response);
+
   } catch (error) {
-    console.error('❌ Debug error:', error);
-    res.status(500).json({ success: false, error: error.message });
+    console.error('❌ Error fetching ratings:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch ratings: ' + error.message
+    });
   }
 });
 

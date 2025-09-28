@@ -35,34 +35,34 @@ const upload = multer({
   }
 });
 
-// Get business by email - ✅ Add detailed logging
+// GET business by email
 router.get('/email/:email', async (req, res) => {
   try {
     const { email } = req.params;
     
-    console.log('Looking for business with email:', email);
+    console.log('🔍 Fetching business by email:', email);
     
-    const business = await Business.findOne({ email: email }).select('-password');
+    const business = await Business.findOne({ email: email });
     
     if (!business) {
-      console.log('Business not found for email:', email);
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Business not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Business not found'
       });
     }
     
-    console.log('Found business:', business.businessName);
+    console.log('✅ Business found:', business.businessName);
     
-    res.json({ 
-      success: true, 
-      business: business 
+    res.json({
+      success: true,
+      business: business
     });
+    
   } catch (error) {
-    console.error('Error fetching business by email:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error' 
+    console.error('❌ Error fetching business by email:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch business details'
     });
   }
 });

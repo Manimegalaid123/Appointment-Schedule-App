@@ -15,13 +15,13 @@ import {
   CalendarDays,
   AlertCircle,
   Info,
-  Navigation  // Add this import
+  Navigation
 } from 'lucide-react';
 import { businessAPI, appointmentAPI } from '../utils/api';
 import './CustomerDashboard.css';
 import { useNavigate, Link } from 'react-router-dom';
 
-// ADD THIS REUSABLE COMPONENT HERE
+// Utility Components
 const RatingStars = ({ rating, totalRatings, size = 16 }) => {
   const fullStars = Math.floor(rating);
   const hasHalfStar = rating % 1 >= 0.5;
@@ -55,7 +55,6 @@ const RatingStars = ({ rating, totalRatings, size = 16 }) => {
   );
 };
 
-// Add this component after your RatingStars component
 const DateWarning = ({ message }) => (
   <div style={{
     backgroundColor: '#fef2f2',
@@ -74,8 +73,23 @@ const DateWarning = ({ message }) => (
   </div>
 );
 
+// Utility Functions
+const formatTimeFor12Hour = (time24) => {
+  try {
+    if (!time24) return '';
+    const [hours, minutes] = time24.split(':');
+    const hour = parseInt(hours, 10);
+    const minute = parseInt(minutes, 10);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const hour12 = hour % 12 || 12;
+    return `${hour12}:${minute.toString().padStart(2, '0')} ${ampm}`;
+  } catch (error) {
+    return time24;
+  }
+};
+
 const CustomerDashboard = () => {
-  // 1. State declarations
+  // State declarations
   const [customerName, setCustomerName] = useState('');
   const customerEmail = localStorage.getItem('email');
   const [formData, setFormData] = useState({
@@ -101,18 +115,17 @@ const CustomerDashboard = () => {
   const [workingHours, setWorkingHours] = useState({ start: '09:00', end: '19:00' });
   const [businessName, setBusinessName] = useState('');
   const [showWorkingHours, setShowWorkingHours] = useState(false);
-
-  // Add state for businesses and selected business
   const [selectedBusiness, setSelectedBusiness] = useState(null);
   const [selectedType, setSelectedType] = useState('');
   const [showBookingForm, setShowBookingForm] = useState(false);
-
   const [ratingModal, setRatingModal] = useState(null);
   const [userRating, setUserRating] = useState(0);
+  const [businessReviews, setBusinessReviews] = useState({});
+  const [expandedReviews, setExpandedReviews] = useState({});
 
   const navigate = useNavigate();
 
-  // 2. Utility functions (MOVE THESE UP)
+  // Utility functions
   const getTodayDate = () => {
     const today = new Date();
     return today.toISOString().split('T')[0];
@@ -147,13 +160,66 @@ const CustomerDashboard = () => {
     setFormData(prev => ({ ...prev, date: selectedDate, time: '' }));
   };
 
+  const fetchBusinessServices = async (businessEmail) => {
+    try {
+      const response = await axios.get(`http://localhost:5000/api/businesses/email/${businessEmail}`);
+      if (response.data.success) {
+        const business = response.data.business;
+        setServices(business.services || []);
+        setBusinessName(business.businessName || '');
+        setWorkingHours({
+          start: business.workingHours?.start || '09:00',
+          end: business.workingHours?.end || '19:00'
+        });
+        setShowWorkingHours(true);
+      }
+    } catch (error) {
+      console.error('Error fetching business services:', error);
+      setServices([]);
+      setServiceError('Failed to load services for this business.');
+    }
+  };
+
+  const generateTimeSlots = () => {
+    const slots = [];
+    for (let hour = 6; hour <= 23; hour++) {
+      for (let minute = 0; minute < 60; minute += 30) {
+        const time = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+        const label = new Date(`2024-01-01T${time}`).toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        });
+        slots.push({ value: time, label });
+      }
+    }
+    return slots;
+  };
+
+  const isWithinWorkingHours = (time, start, end) => {
+    try {
+      const toMinutes = (t) => {
+        const [h, m] = t.split(':').map(num => parseInt(num, 10));
+        return h * 60 + m;
+      };
+      
+      const timeMinutes = toMinutes(time);
+      const startMinutes = toMinutes(start);
+      const endMinutes = toMinutes(end);
+      
+      return timeMinutes >= startMinutes && timeMinutes <= endMinutes;
+    } catch (error) {
+      console.error('Error checking working hours:', error);
+      return true;
+    }
+  };
+
   const getAvailableTimeSlots = () => {
     const allSlots = generateTimeSlots();
     const workingHoursSlots = allSlots.filter(slot => 
       isWithinWorkingHours(slot.value, workingHours.start, workingHours.end)
     );
     
-    // If booking for today, filter out past times
     if (formData.date === getTodayDate()) {
       const now = new Date();
       const currentTime = now.getHours() * 60 + now.getMinutes();
@@ -161,108 +227,14 @@ const CustomerDashboard = () => {
       return workingHoursSlots.filter(slot => {
         const [hours, minutes] = slot.value.split(':').map(num => parseInt(num, 10));
         const slotTime = hours * 60 + minutes;
-        return slotTime > currentTime + 30; // Add 30 minutes buffer
+        return slotTime > currentTime + 30;
       });
     }
     
     return workingHoursSlots;
   };
 
-  // 3. useEffect hooks
-  useEffect(() => {
-    const fetchCustomerName = async () => {
-      try {
-        const response = await axios.get(
-          `http://localhost:5000/api/users/customer/${encodeURIComponent(customerEmail)}`
-        );
-        if (response.data.success) setCustomerName(response.data.name);
-      } catch (error) {
-        console.error('Error fetching customer name:', error);
-      }
-    };
-    fetchCustomerName();
-  }, [customerEmail]);
-
-  useEffect(() => {
-    const fetchAppointments = async () => {
-      try {
-        const res = await axios.get(`http://localhost:5000/api/appointments/customer/${customerEmail}`);
-        if (res.data.appointments) {
-          // FETCH BUSINESS DETAILS for each appointment
-          const appointmentsWithBusinessDetails = await Promise.all(
-            res.data.appointments.map(async (appointment) => {
-              try {
-                // Fetch business details using business email
-                const businessRes = await axios.get(`http://localhost:5000/api/businesses/email/${appointment.businessEmail}`);
-                if (businessRes.data.success) {
-                  return {
-                    ...appointment,
-                    businessName: businessRes.data.business.businessName,
-                    businessAddress: businessRes.data.business.businessAddress,
-                    businessPhone: businessRes.data.business.phone,
-                    workingHours: businessRes.data.business.workingHours
-                  };
-                }
-                return appointment;
-              } catch (error) {
-                console.error('Error fetching business details:', error);
-                return appointment;
-              }
-            })
-          );
-          setAppointments(appointmentsWithBusinessDetails);
-        } else {
-          setAppointments([]);
-        }
-      } catch (err) {
-        console.error('Error fetching appointments:', err);
-        setAppointments([]);
-      }
-    };
-    fetchAppointments();
-  }, [customerEmail]);
-
-  useEffect(() => {
-    setFormData(prev => ({
-      ...prev,
-      customerName: customerName || ''
-    }));
-  }, [customerName]);
-
-  // Fetch booked times when businessEmail, service, or date changes
-  useEffect(() => {
-    const fetchBookedTimes = async () => {
-      if (formData.businessEmail && formData.service && formData.date) {
-        setLoadingBookedTimes(true);
-        try {
-          const response = await axios.get('http://localhost:5000/api/appointments/booked-times/check', {
-            params: {
-              businessEmail: formData.businessEmail,
-              service: formData.service,
-              date: formData.date
-            }
-          });
-          
-          if (response.data.success) {
-            setBookedTimes(response.data.bookedTimes || []);
-          } else {
-            setBookedTimes([]);
-          }
-        } catch (error) {
-          console.error('Error fetching booked times:', error);
-          setBookedTimes([]);
-        } finally {
-          setLoadingBookedTimes(false);
-        }
-      } else {
-        setBookedTimes([]);
-      }
-    };
-
-    fetchBookedTimes();
-  }, [formData.businessEmail, formData.service, formData.date]);
-
-  // 4. Event handlers
+  // Event handlers
   const handleInputChange = async (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -282,8 +254,8 @@ const CustomerDashboard = () => {
     setFormData(prev => ({
       ...prev,
       businessEmail: business.email,
-      businessName: business.businessName,      // ADD THIS
-      businessAddress: business.businessAddress, // ADD THIS
+      businessName: business.businessName,
+      businessAddress: business.businessAddress,
       service: service,
       date: '',
       time: '',
@@ -302,8 +274,8 @@ const CustomerDashboard = () => {
       const response = await appointmentAPI.create({
         ...formData,
         customerEmail,
-        businessName: selectedBusiness?.businessName,     // ADD THIS
-        businessAddress: selectedBusiness?.businessAddress, // ADD THIS
+        businessName: selectedBusiness?.businessName,
+        businessAddress: selectedBusiness?.businessAddress,
         status: 'pending',
         createdAt: new Date().toISOString()
       });
@@ -340,9 +312,9 @@ const CustomerDashboard = () => {
       }
     } catch (error) {
       console.error('Booking error:', error);
-      if (error.response && error.response.data && error.response.data.message) {
+      if (error.response?.data?.message) {
         setBookingError(error.response.data.message);
-      } else if (error.response && error.response.status === 409) {
+      } else if (error.response?.status === 409) {
         setBookingError('This time slot is already booked. Please select a different time.');
       } else {
         setBookingError('Failed to book appointment. Please try again.');
@@ -353,158 +325,82 @@ const CustomerDashboard = () => {
   };
 
   const handleRatingSubmit = async () => {
-    if (userRating < 1 || userRating > 5 || !ratingModal) return;
+    if (userRating < 1 || userRating > 5 || !ratingModal) {
+      alert('Please select a rating between 1 and 5 stars');
+      return;
+    }
+
     try {
       const response = await axios.post('http://localhost:5000/api/appointments/rate', {
         appointmentId: ratingModal._id,
-        rating: userRating
+        rating: userRating,
+        comment: ''
       });
+
       if (response.data.success) {
         setAppointments(prev =>
           prev.map(appointment =>
             appointment._id === ratingModal._id
-              ? { ...appointment, rating: userRating }
+              ? { 
+                  ...appointment, 
+                  rating: {
+                    rating: userRating,
+                    comment: '',
+                    ratedAt: new Date()
+                  }
+                }
               : appointment
           )
         );
+
+        alert(`✅ Thank you! You rated this service ${userRating} star${userRating !== 1 ? 's' : ''}.`);
         setRatingModal(null);
         setUserRating(0);
       } else {
-        console.error('Failed to submit rating:', response.data.message);
+        alert('❌ Failed to submit rating: ' + (response.data.message || 'Unknown error'));
       }
     } catch (error) {
-      console.error('Error submitting rating:', error);
+      console.error('❌ Error submitting rating:', error);
+      alert(`❌ Failed to submit rating: ${error.response?.data?.message || 'Server error'}`);
     }
   };
 
-  const isFormValid = () => {
-    return (
-      formData.customerName &&
-      formData.customerPhone &&
-      formData.businessEmail &&
-      formData.service &&
-      formData.date &&
-      formData.time
-    );
-  };
-
-  const convertTo24Hour = (timeStr) => {
-    try {
-      if (!timeStr || typeof timeStr !== 'string') return '09:00';
-      
-      const cleanTime = timeStr.trim().replace(/\s+/g, ' ');
-      
-      if (!cleanTime.includes('AM') && !cleanTime.includes('PM')) {
-        if (/^\d{1,2}:\d{2}$/.test(cleanTime)) {
-          const [h, m] = cleanTime.split(':');
-          const hour = parseInt(h, 10);
-          if (hour >= 0 && hour <= 23) {
-            return `${hour.toString().padStart(2, '0')}:${m}`;
-          }
-        }
-        return '09:00';
-      }
-      
-      const [time, modifier] = cleanTime.split(' ');
-      if (!time || !modifier) return '09:00';
-      
-      let [hours, minutes] = time.split(':');
-      if (!hours || !minutes) return '09:00';
-      
-      hours = parseInt(hours, 10);
-      
-      if (isNaN(hours) || hours < 1 || hours > 12) return '09:00';
-      
-      if (modifier.toUpperCase() === 'PM' && hours !== 12) {
-        hours += 12;
-      }
-      if (modifier.toUpperCase() === 'AM' && hours === 12) {
-        hours = 0;
-      }
-      
-      return `${hours.toString().padStart(2, '0')}:${minutes}`;
-    } catch (error) {
-      console.error('Error converting time:', error);
-      return '09:00';
-    }
-  };
-
-  const isWithinWorkingHours = (time, start, end) => {
-    try {
-      const toMinutes = (t) => {
-        const [h, m] = t.split(':').map(num => parseInt(num, 10));
-        return h * 60 + m;
-      };
-      
-      const timeMinutes = toMinutes(time);
-      const startMinutes = toMinutes(start);
-      const endMinutes = toMinutes(end);
-      
-      return timeMinutes >= startMinutes && timeMinutes <= endMinutes;
-    } catch (error) {
-      console.error('Error checking working hours:', error);
-      return true;
-    }
-  };
-
-  const generateTimeSlots = () => {
-    const slots = [];
-    for (let hour = 6; hour <= 23; hour++) {
-      for (let minute = 0; minute < 60; minute += 30) {
-        const time = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-        const label = new Date(`2024-01-01T${time}`).toLocaleTimeString('en-US', {
-          hour: 'numeric',
-          minute: '2-digit',
-          hour12: true
-        });
-        slots.push({ value: time, label });
-      }
-    }
-    return slots;
-  };
-
-  // 3. useEffect hooks
-  useEffect(() => {
-    const fetchBusinesses = async () => {
-      try {
-        let url = 'http://localhost:5000/api/businesses';
-        if (selectedType) {
-          url += `?type=${selectedType}`;
-        }
-        const response = await axios.get(url);
-        if (response.data.success) {
-          console.log('📊 Business data with ratings:', response.data.businesses);
-          
-          // Log each business's rating data for debugging
-          response.data.businesses.forEach((biz, idx) => {
-            console.log(`🏢 ${biz.businessName}:`, {
-              averageRating: biz.averageRating || 0,
-              totalRatings: biz.totalRatings || 0,
-              hasRatings: (biz.averageRating > 0),
-              ratingsArray: biz.ratings?.length || 0
-            });
-          });
-          
-          setBusinesses(response.data.businesses);
-        } else {
-          setBusinesses([]);
-        }
-      } catch (error) {
-        console.log('Error fetching businesses:', error);
-        setBusinesses([]);
-      }
-    };
+  const fetchBusinessReviews = async (businesses) => {
+    const reviewsData = {};
     
-    if (selectedType) {
-      fetchBusinesses();
+    await Promise.all(
+      businesses.map(async (business) => {
+        try {
+          const response = await axios.get(`http://localhost:5000/api/appointments/ratings/${business.email}`);
+          if (response.data.success) {
+            reviewsData[business._id] = response.data.allReviews || [];
+          }
+        } catch (error) {
+          console.error(`Error fetching reviews for ${business.businessName}:`, error);
+          reviewsData[business._id] = [];
+        }
+      })
+    );
+    
+    setBusinessReviews(reviewsData);
+  };
+
+  const handleAppointmentClick = async (appointment) => {
+    try {
+      const response = await axios.get(`http://localhost:5000/api/businesses/email/${appointment.businessEmail}`);
+      
+      if (response.data.success) {
+        const business = response.data.business;
+        navigate(`/salon/${business._id}`);
+      } else {
+        alert(`Appointment Details:\n\nBusiness: ${appointment.businessName || 'Unknown'}\nService: ${appointment.service}\nDate: ${new Date(appointment.date).toLocaleDateString()}\nTime: ${formatTimeFor12Hour(appointment.time)}\nStatus: ${appointment.status.toUpperCase()}`);
+      }
+    } catch (error) {
+      console.error('Error fetching business details:', error);
+      alert(`Appointment Details:\n\nBusiness: ${appointment.businessName || 'Unknown'}\nService: ${appointment.service}\nDate: ${new Date(appointment.date).toLocaleDateString()}\nTime: ${formatTimeFor12Hour(appointment.time)}\nStatus: ${appointment.status.toUpperCase()}`);
     }
-  }, [selectedType]);
+  };
 
-  const [showMapModal, setShowMapModal] = useState(false);
-  const [selectedMapAddress, setSelectedMapAddress] = useState('');
-  const [selectedMapBusinessName, setSelectedMapBusinessName] = useState('');
-
-  // Handle address click to show map - IMPROVED WITH ADDRESS VALIDATION
   const handleAddressClick = (address, businessName) => {
     if (!address || address === 'N/A' || address.trim() === '') {
       alert('Address not available for this business');
@@ -520,43 +416,135 @@ const CustomerDashboard = () => {
     }
   };
 
-  // Open in external navigation apps
   const openInNavigationApp = (address) => {
     const encodedAddress = encodeURIComponent(address);
-    
-    // Try to detect device and open appropriate app
     const userAgent = navigator.userAgent.toLowerCase();
     let url;
     
     if (userAgent.includes('iphone') || userAgent.includes('ipad')) {
-      // iOS - Apple Maps
       url = `https://maps.apple.com/?daddr=${encodedAddress}`;
     } else if (userAgent.includes('android')) {
-      // Android - Google Maps
       url = `https://www.google.com/maps/dir/?api=1&destination=${encodedAddress}`;
     } else {
-      // Desktop - Google Maps (CHANGED FROM OpenStreetMap)
       url = `https://www.google.com/maps/search/${encodedAddress}`;
     }
     
     window.open(url, '_blank');
   };
 
-  // Initialize rating fields for businesses - ADD THIS FUNCTION
-  const initializeRatingFields = () => {
-    fetch('http://localhost:5000/api/businesses/init-rating-fields', {
-      method: 'POST'
-    })
-    .then(res => res.json())
-    .then(data => {
-      console.log('Rating fields initialized:', data);
-      // Refresh the page after initialization
-      window.location.reload();
-    })
-    .catch(error => {
-      console.error('Error initializing rating fields:', error);
-    });
-  };
+  // useEffect hooks
+  useEffect(() => {
+    const fetchCustomerName = async () => {
+      try {
+        const response = await axios.get(
+          `http://localhost:5000/api/users/customer/${encodeURIComponent(customerEmail)}`
+        );
+        if (response.data.success) setCustomerName(response.data.name);
+      } catch (error) {
+        console.error('Error fetching customer name:', error);
+      }
+    };
+    fetchCustomerName();
+  }, [customerEmail]);
+
+  useEffect(() => {
+    const fetchAppointments = async () => {
+      try {
+        const res = await axios.get(`http://localhost:5000/api/appointments/customer/${customerEmail}`);
+        
+        if (res.data.success && res.data.appointments) {
+          const appointmentsData = res.data.appointments.map(appointment => ({
+            ...appointment,
+            businessName: appointment.businessName || appointment.businessEmail || 'Business Name Not Available',
+            businessAddress: appointment.businessAddress || 'Address not available',
+            businessPhone: appointment.businessPhone || 'Phone not available',
+            workingHours: appointment.workingHours || '9:00 AM - 6:00 PM'
+          }));
+          
+          setAppointments(appointmentsData);
+        } else {
+          setAppointments([]);
+        }
+      } catch (err) {
+        console.error('❌ Error fetching appointments:', err);
+        setAppointments([]);
+      }
+    };
+
+    if (customerEmail) {
+      fetchAppointments();
+    }
+  }, [customerEmail]);
+
+  useEffect(() => {
+    setFormData(prev => ({
+      ...prev,
+      customerName: customerName || ''
+    }));
+  }, [customerName]);
+
+  useEffect(() => {
+    const fetchBookedTimes = async () => {
+      if (formData.businessEmail && formData.service && formData.date) {
+        setLoadingBookedTimes(true);
+        try {
+          const response = await axios.get('http://localhost:5000/api/appointments/booked-times/check', {
+            params: {
+              businessEmail: formData.businessEmail,
+              service: formData.service,
+              date: formData.date
+            }
+          });
+          
+          if (response.data.success) {
+            setBookedTimes(response.data.bookedTimes || []);
+          } else {
+            setBookedTimes([]);
+          }
+        } catch (error) {
+          console.error('Error fetching booked times:', error);
+          setBookedTimes([]);
+        } finally {
+          setLoadingBookedTimes(false);
+        }
+      } else {
+        setBookedTimes([]);
+      }
+    };
+
+    fetchBookedTimes();
+  }, [formData.businessEmail, formData.service, formData.date]);
+
+  useEffect(() => {
+    const fetchBusinesses = async () => {
+      try {
+        let url = 'http://localhost:5000/api/businesses';
+        if (selectedType) {
+          url += `?type=${selectedType}`;
+        }
+        const response = await axios.get(url);
+        if (response.data.success) {
+          const businessesData = response.data.businesses;
+          setBusinesses(businessesData);
+          
+          if (businessesData.length > 0) {
+            await fetchBusinessReviews(businessesData);
+          }
+        } else {
+          setBusinesses([]);
+          setBusinessReviews({});
+        }
+      } catch (error) {
+        console.log('Error fetching businesses:', error);
+        setBusinesses([]);
+        setBusinessReviews({});
+      }
+    };
+    
+    if (selectedType) {
+      fetchBusinesses();
+    }
+  }, [selectedType]);
 
   if (isSuccess) {
     return (
@@ -587,622 +575,895 @@ const CustomerDashboard = () => {
   }
 
   return (
-    <div className="dashboard-container">
-      {/* Header */}
-      <div className="dashboard-header">
-        <div className="welcome-section">
-          <h1>Welcome, {customerName || 'Customer'}</h1>
-          <p>Manage your appointments with ease</p>
-        </div>
-      </div>
-
-      {/* Navigation Tabs - REMOVED Browse Services Tab */}
-      <div className="navigation-tabs">
-        <button 
-          className={`nav-tab ${activeTab === 'appointments' ? 'active' : ''}`}
-          onClick={() => setActiveTab('appointments')}
-        >
-          <CalendarDays size={20} />
-          <span>My Appointments</span>
-        </button>
-      </div>
-
-      {/* Content Area */}
-      <div className="content-area">
-        {/* ALWAYS SHOW DROPDOWN FIRST - NO TAB CONDITION */}
-        {activeTab !== 'appointments' && (
-          <div className="browse-content">
-            <div className="content-header" style={{ textAlign: 'center', marginBottom: '40px' }}>
-              <h1 style={{ fontSize: '32px', fontWeight: '700', color: '#1f2937', marginBottom: '16px' }}>
-                Choose Your Appointment Type
-              </h1>
-              <p style={{ fontSize: '16px', color: '#6b7280' }}>
-                Select the type of service you're looking for and browse available providers
-              </p>
-            </div>
-
-            {/* Business Type Filter - CENTERED AND PROMINENT */}
-            <div style={{ 
-              marginBottom: '40px', 
-              textAlign: 'center',
-              backgroundColor: 'white',
-              padding: '32px',
-              borderRadius: '12px',
-              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-              maxWidth: '600px',
-              margin: '0 auto 40px auto'
-            }}>
-              <label style={{ 
-                display: 'block', 
-                marginBottom: '16px', 
-                fontSize: '18px',
-                fontWeight: '600',
-                color: '#374151'
-              }}>
-                Choose Business Type:
-              </label>
-              <select 
-                value={selectedType} 
-                onChange={e => setSelectedType(e.target.value)}
-                style={{
-                  width: '100%',
-                  maxWidth: '400px',
-                  padding: '16px 20px',
-                  border: '2px solid #d1d5db',
-                  borderRadius: '8px',
-                  fontSize: '16px',
-                  backgroundColor: 'white',
-                  cursor: 'pointer',
-                  outline: 'none'
-                }}
-              >
-                <option value="">-- Select Type --</option>
-                <option value="salon">Salon</option>
-                <option value="doctor">Doctor</option>
-                <option value="consultant">Consultant</option>
-              </select>
-            </div>
-
-            {/* No Selection State */}
-            {!selectedType && (
-              <div style={{
-                textAlign: 'center',
-                padding: '60px 20px',
-                color: '#6b7280'
-              }}>
-                <Building2 size={64} style={{ marginBottom: '16px', opacity: 0.5, margin: '0 auto 16px auto' }} />
-                <h3 style={{ margin: '0 0 8px 0', fontSize: '20px' }}>Select a Service Type</h3>
-                <p style={{ margin: 0 }}>Choose from Salon, Doctor, or Consultant to see available providers</p>
-              </div>
-            )}
-
-            {/* Businesses Grid - ONLY SHOW WHEN TYPE IS SELECTED */}
-            {selectedType && (
-              <div>
-                <h2 style={{
-                  fontSize: '24px',
-                  fontWeight: '600',
-                  color: '#1f2937',
-                  marginBottom: '24px',
-                  textAlign: 'center'
-                }}>
-                  Available {selectedType === 'salon' ? 'Salons' : 
-                            selectedType === 'doctor' ? 'Doctors' : 
-                            selectedType === 'consultant' ? 'Consultants' : 'Services'} ({businesses.length})
-                </h2>
-                
-                <div className="businesses-grid" style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
-                  gap: '20px',
-                  marginTop: '20px'
-                }}>
-                  {businesses.length === 0 ? (
-                    <div style={{
-                      gridColumn: '1 / -1',
-                      textAlign: 'center',
-                      padding: '40px',
-                      color: '#6b7280',
-                      backgroundColor: 'white',
-                      borderRadius: '12px',
-                      boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
-                    }}>
-                      <Building2 size={48} style={{ marginBottom: '16px', opacity: 0.3 }} />
-                      <h3 style={{ margin: '0 0 8px 0', fontSize: '20px', color: '#374151' }}>
-                        No {selectedType === 'salon' ? 'Salons' : 
-                            selectedType === 'doctor' ? 'Doctors' : 
-                            selectedType === 'consultant' ? 'Consultants' : 'Businesses'} Found
-                      </h3>
-                      <p style={{ margin: 0, color: '#6b7280' }}>
-                        No registered {selectedType}s available at the moment.
-                      </p>
-                    </div>
-                  ) : (
-                    businesses.map(biz => (
-                      <div key={biz._id} className="business-card" style={{
-                        border: '1px solid #e5e7eb',
-                        borderRadius: '12px',
-                        overflow: 'hidden',
-                        backgroundColor: 'white',
-                        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                        transition: 'transform 0.2s, box-shadow 0.2s'
-                      }}>
-                        {/* Business Image */}
-                        <div style={{
-                          width: '100%',
-                          height: '200px',
-                          position: 'relative',
-                          overflow: 'hidden',
-                          backgroundColor: '#f9fafb'
-                        }}>
-                          {biz.imageUrl ? (
-                            <img
-                              src={`http://localhost:5000${biz.imageUrl}`}
-                              alt={biz.businessName}
-                              style={{
-                                width: '100%',
-                                height: '100%',
-                                objectFit: 'cover'
-                              }}
-                              onError={(e) => {
-                                e.target.style.display = 'none';
-                                e.target.nextSibling.style.display = 'flex';
-                              }}
-                            />
-                          ) : null}
-                          
-                          <div style={{
-                            width: '100%',
-                            height: '100%',
-                            display: biz.imageUrl ? 'none' : 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            backgroundColor: '#f3f4f6',
-                            color: '#9ca3af'
-                          }}>
-                            <Building2 size={48} />
-                          </div>
-                        </div>
-
-                        {/* Business Info */}
-                        <div style={{ padding: '20px' }}>
-                          <h3 style={{
-                            margin: '0 0 8px 0',
-                            fontSize: '18px',
-                            fontWeight: '600',
-                            color: '#1f2937'
-                          }}>
-                            {biz.businessName}
-                          </h3>
-                          
-                          {/* Address */}
-                          <div 
-                            onClick={() => handleAddressClick(biz.businessAddress, biz.businessName)}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              marginBottom: '6px',
-                              color: '#1e40af',
-                              fontSize: '14px',
-                              cursor: 'pointer',
-                              transition: 'color 0.2s',
-                              textDecoration: 'underline'
-                            }}
-                            onMouseOver={(e) => {
-                              e.currentTarget.style.color = '#1d4ed8';
-                            }}
-                            onMouseOut={(e) => {
-                              e.currentTarget.style.color = '#1e40af';
-                            }}
-                          >
-                            <MapPin size={14} style={{ marginRight: '6px', flexShrink: 0 }} />
-                            <span>{biz.businessAddress}</span>
-                            <Navigation size={12} style={{ marginLeft: '4px' }} />
-                          </div>
-                          
-                          {/* Phone */}
-                          <div style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            marginBottom: '6px',
-                            color: '#6b7280',
-                            fontSize: '14px'
-                          }}>
-                            <Phone size={14} style={{ marginRight: '6px' }} />
-                            <span>{biz.phone || 'Phone not available'}</span>
-                          </div>
-                          
-                          {/* Working Hours */}
-                          <div style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            marginBottom: '12px',
-                            color: '#6b7280',
-                            fontSize: '14px'
-                          }}>
-                            <Clock size={14} style={{ marginRight: '6px' }} />
-                            <span>{biz.workingHours || '9:00 AM - 7:00 PM'}</span>
-                          </div>
-
-                          {/* Google-Style Rating Display */}
-                          <div style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            marginBottom: '12px',
-                            padding: '8px 0',
-                            borderBottom: '1px solid #f1f5f9'
-                          }}>
-                            {biz.averageRating && biz.averageRating > 0 ? (
-                              <>
-                                {/* Rating Number */}
-                                <span style={{ 
-                                  fontSize: '18px', 
-                                  fontWeight: '600', 
-                                  color: '#1f2937' 
-                                }}>
-                                  {parseFloat(biz.averageRating).toFixed(1)}
-                                </span>
-                                
-                                {/* Stars */}
-                                <div style={{ 
-                                  display: 'flex', 
-                                  alignItems: 'center', 
-                                  gap: '2px' 
-                                }}>
-                                  {[1, 2, 3, 4, 5].map(star => (
-                                    <span 
-                                      key={star}
-                                      style={{ 
-                                        color: star <= Math.round(biz.averageRating) ? '#fbbf24' : '#e5e7eb',
-                                        fontSize: '16px'
-                                      }}
-                                    >
-                                      ★
-                                    </span>
-                                  ))}
-                                </div>
-                                
-                                {/* Review Count */}
-                                <span style={{ 
-                                  fontSize: '14px', 
-                                  color: '#1e40af',
-                                  textDecoration: 'underline',
-                                  cursor: 'pointer'
-                                }}>
-                                  {biz.totalRatings || 0} {(biz.totalRatings === 1) ? 'review' : 'reviews'}
-                                </span>
-                              </>
-                            ) : (
-                              <span style={{ 
-                                fontSize: '14px', 
-                                color: '#6b7280',
-                                fontStyle: 'italic'
-                              }}>
-                                No reviews yet • Be the first to review
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Services - Now clickable */}
-                          {biz.services && biz.services.length > 0 && (
-                            <div style={{ marginBottom: '16px' }}>
-                              <p style={{
-                                margin: '0 0 6px 0',
-                                fontSize: '13px',
-                                fontWeight: '600',
-                                color: '#4b5563'
-                              }}>
-                                Services Available (Click to Book):
-                              </p>
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                                {biz.services.map((service, idx) => (
-                                  <button
-                                    key={idx}
-                                    onClick={() => handleServiceSelect(biz, service)}
-                                    style={{
-                                      backgroundColor: '#eff6ff',
-                                      color: '#1e40af',
-                                      padding: '4px 8px',
-                                      borderRadius: '12px',
-                                      fontSize: '11px',
-                                      fontWeight: '500',
-                                      border: 'none',
-                                      cursor: 'pointer',
-                                      transition: 'all 0.2s',
-                                    }}
-                                    onMouseOver={(e) => {
-                                      e.target.style.backgroundColor = '#dbeafe';
-                                      e.target.style.transform = 'scale(1.05)';
-                                    }}
-                                    onMouseOut={(e) => {
-                                      e.target.style.backgroundColor = '#eff6ff';
-                                      e.target.style.transform = 'scale(1)';
-                                    }}
-                                  >
-                                    {service}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Action Buttons */}
-                          <div style={{ display: 'flex', gap: '8px' }}>
-                            <button 
-                              onClick={() => navigate(`/salon/${biz._id}`)}
-                              style={{
-                                flex: 1,
-                                padding: '10px 16px',
-                                border: '1px solid #d1d5db',
-                                backgroundColor: 'white',
-                                color: '#374151',
-                                borderRadius: '6px',
-                                cursor: 'pointer',
-                                fontSize: '14px'
-                              }}
-                            >
-                              View Details
-                            </button>
-                            {/* ADD this new Route button */}
-                            <button 
-                              onClick={() => openInNavigationApp(biz.businessAddress)}
-                              style={{
-                                padding: '10px 12px',
-                                border: '1px solid #10b981',
-                                backgroundColor: '#10b981',
-                                color: 'white',
-                                borderRadius: '6px',
-                                cursor: 'pointer',
-                                fontSize: '14px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '4px'
-                              }}
-                            >
-                              <Navigation size={14} />
-                              Route
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
+    <div style={{
+      width: '100vw',
+      minHeight: '100vh',
+      margin: 0,
+      padding: 0,
+      boxSizing: 'border-box',
+      overflow: 'hidden'
+    }}>
+      <div className="dashboard-container" style={{
+        width: '100%',
+        maxWidth: '100%',
+        margin: 0,
+        padding: '20px',
+        boxSizing: 'border-box'
+      }}>
+        {/* Header */}
+        <div className="dashboard-header" style={{
+          width: '100%',
+          maxWidth: '1200px',
+          margin: '0 auto',
+          boxSizing: 'border-box'
+        }}>
+          <div className="welcome-section">
+            <h1>Welcome, {customerName || 'Customer'}</h1>
+            <p>Manage your appointments with ease</p>
           </div>
-        )}
+        </div>
 
-        {activeTab === 'appointments' && (
-          <div className="appointments-content">
-            <div className="content-header">
-              <h2 style={{ fontSize: '24px', fontWeight: '600', color: '#1f2937', marginBottom: '24px' }}>
-                My appointments
-              </h2>
-            </div>
+        {/* Navigation Tabs */}
+        <div className="navigation-tabs" style={{
+          width: '100%',
+          maxWidth: '1200px',
+          margin: '0 auto 32px auto',
+          boxSizing: 'border-box'
+        }}>
+          <button 
+            className={`nav-tab ${activeTab === 'appointments' ? 'active' : ''}`}
+            onClick={() => setActiveTab('appointments')}
+          >
+            <CalendarDays size={20} />
+            <span>My Appointments</span>
+          </button>
+        </div>
 
-            {appointments.length === 0 ? (
-              <div className="no-appointments" style={{ 
-                backgroundColor: '#f9fafb', 
-                border: '1px solid #e5e7eb', 
-                borderRadius: '12px', 
-                padding: '40px',
-                textAlign: 'center'
+        {/* Content Area */}
+        <div className="content-area" style={{
+          width: '100%',
+          maxWidth: '1200px',
+          margin: '0 auto',
+          boxSizing: 'border-box'
+        }}>
+          {/* Browse Services Tab */}
+          {activeTab === 'browse' && (
+            <div className="browse-content">
+              <div className="content-header" style={{ textAlign: 'center', marginBottom: '40px' }}>
+                <h1 style={{ fontSize: '32px', fontWeight: '700', color: '#1f2937', marginBottom: '16px' }}>
+                  Choose Your Appointment Type
+                </h1>
+                <p style={{ fontSize: '16px', color: '#6b7280' }}>
+                  Select the type of service you're looking for and browse available providers
+                </p>
+              </div>
+
+              {/* Business Type Filter */}
+              <div style={{ 
+                marginBottom: '40px', 
+                textAlign: 'center',
+                backgroundColor: 'white',
+                padding: '32px',
+                borderRadius: '12px',
+                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                maxWidth: '600px',
+                margin: '0 auto 40px auto'
               }}>
-                <CalendarDays size={48} style={{ color: '#9ca3af', marginBottom: '16px' }} />
-                <h3 style={{ color: '#374151', marginBottom: '8px' }}>No appointments yet</h3>
-                <p style={{ color: '#6b7280', marginBottom: '20px' }}>Book your first appointment to get started</p>
-                <button 
-                  onClick={() => setActiveTab('browse')}
-                  style={{ 
-                    padding: '12px 24px', 
-                    backgroundColor: '#3b82f6', 
-                    color: '#fff', 
+                <label style={{ 
+                  display: 'block', 
+                  marginBottom: '16px', 
+                  fontSize: '18px',
+                  fontWeight: '600',
+                  color: '#374151'
+                }}>
+                  Choose Business Type:
+                </label>
+                <select 
+                  value={selectedType} 
+                  onChange={e => setSelectedType(e.target.value)}
+                  style={{
+                    width: '100%',
+                    maxWidth: '400px',
+                    padding: '16px 20px',
+                    border: '2px solid #d1d5db',
                     borderRadius: '8px',
-                    border: 'none',
+                    fontSize: '16px',
+                    backgroundColor: 'white',
                     cursor: 'pointer',
-                    fontSize: '14px',
-                    fontWeight: '500'
+                    outline: 'none'
                   }}
                 >
-                  Browse Services
-                </button>
+                  <option value="">-- Select Type --</option>
+                  <option value="salon">Salon</option>
+                  <option value="doctor">Doctor</option>
+                  <option value="consultant">Consultant</option>
+                </select>
               </div>
-            ) : (
-              <div className="appointments-list" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {appointments.map(app => (
-                  <div key={app._id} style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    backgroundColor: 'white',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '12px',
-                    padding: '20px',
-                    gap: '20px',
-                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+
+              {/* No Selection State */}
+              {!selectedType && (
+                <div style={{
+                  textAlign: 'center',
+                  padding: '60px 20px',
+                  color: '#6b7280'
+                }}>
+                  <Building2 size={64} style={{ marginBottom: '16px', opacity: 0.5, margin: '0 auto 16px auto' }} />
+                  <h3 style={{ margin: '0 0 8px 0', fontSize: '20px' }}>Select a Service Type</h3>
+                  <p style={{ margin: 0 }}>Choose from Salon, Doctor, or Consultant to see available providers</p>
+                </div>
+              )}
+
+              {/* Businesses Grid */}
+              {selectedType && (
+                <div>
+                  <h2 style={{
+                    fontSize: '24px',
+                    fontWeight: '600',
+                    color: '#1f2937',
+                    marginBottom: '24px',
+                    textAlign: 'center'
                   }}>
-                    {/* Professional Image */}
-                    <div style={{
-                      width: '80px',
-                      height: '80px',
-                      borderRadius: '12px',
-                      overflow: 'hidden',
-                      backgroundColor: '#f3f4f6',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0
-                    }}>
-                      {app.serviceImageUrl ? (
-                        <img
-                          src={app.serviceImageUrl}
-                          alt={app.service}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                        />
-                      ) : (
-                        <User size={32} style={{ color: '#9ca3af' }} />
-                      )}
-                    </div>
-
-                    {/* Main Content */}
-                    <div style={{ flex: 1 }}>
-                      {/* Business Name & Service - FIXED */}
-                      <h3 style={{ 
-                        margin: '0 0 4px 0', 
-                        fontSize: '18px', 
-                        fontWeight: '600', 
-                        color: '#1f2937' 
-                      }}>
-                        {app.businessName || 'Business Name Not Available'}
-                      </h3>
-                      <p style={{ 
-                        margin: '0 0 8px 0', 
-                        fontSize: '14px', 
-                        color: '#6b7280' 
-                      }}>
-                        {app.service}
-                      </p>
-
-                      {/* Address - FIXED */}
+                    Available {selectedType === 'salon' ? 'Salons' : 
+                              selectedType === 'doctor' ? 'Doctors' : 
+                              selectedType === 'consultant' ? 'Consultants' : 'Services'} ({businesses.length})
+                  </h2>
+                  
+                  <div className="businesses-grid" style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
+                    gap: '20px',
+                    marginTop: '20px'
+                  }}>
+                    {businesses.length === 0 ? (
                       <div style={{
+                        gridColumn: '1 / -1',
+                        textAlign: 'center',
+                        padding: '40px',
+                        color: '#6b7280',
+                        backgroundColor: 'white',
+                        borderRadius: '12px',
+                        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+                      }}>
+                        <Building2 size={48} style={{ marginBottom: '16px', opacity: 0.3 }} />
+                        <h3 style={{ margin: '0 0 8px 0', fontSize: '20px', color: '#374151' }}>
+                          No {selectedType === 'salon' ? 'Salons' : 
+                              selectedType === 'doctor' ? 'Doctors' : 
+                              selectedType === 'consultant' ? 'Consultants' : 'Businesses'} Found
+                        </h3>
+                        <p style={{ margin: 0, color: '#6b7280' }}>
+                          No registered {selectedType}s available at the moment.
+                        </p>
+                      </div>
+                    ) : (
+                      businesses.map(biz => {
+                        const businessReviewsList = businessReviews[biz._id] || [];
+                        
+                        return (
+                          <div key={biz._id} className="business-card" style={{
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '12px',
+                            overflow: 'hidden',
+                            backgroundColor: 'white',
+                            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                            transition: 'transform 0.2s, box-shadow 0.2s'
+                          }}>
+                            {/* Business Image */}
+                            <div style={{
+                              width: '100%',
+                              height: '200px',
+                              position: 'relative',
+                              overflow: 'hidden',
+                              backgroundColor: '#f9fafb'
+                            }}>
+                              {biz.imageUrl ? (
+                                <img
+                                  src={`http://localhost:5000${biz.imageUrl}`}
+                                  alt={biz.businessName}
+                                  style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    objectFit: 'cover'
+                                  }}
+                                  onError={(e) => {
+                                    e.target.style.display = 'none';
+                                    e.target.nextSibling.style.display = 'flex';
+                                  }}
+                                />
+                              ) : null}
+                              
+                              <div style={{
+                                width: '100%',
+                                height: '100%',
+                                display: biz.imageUrl ? 'none' : 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                backgroundColor: '#f3f4f6',
+                                color: '#9ca3af'
+                              }}>
+                                <Building2 size={48} />
+                              </div>
+                            </div>
+
+                            {/* Business Info */}
+                            <div style={{ padding: '20px' }}>
+                              <h3 style={{
+                                margin: '0 0 8px 0',
+                                fontSize: '18px',
+                                fontWeight: '600',
+                                color: '#1f2937'
+                              }}>
+                                {biz.businessName}
+                              </h3>
+                              
+                              {/* Address */}
+                              <div 
+                                onClick={() => handleAddressClick(biz.businessAddress, biz.businessName)}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  marginBottom: '6px',
+                                  color: '#1e40af',
+                                  fontSize: '14px',
+                                  cursor: 'pointer',
+                                  transition: 'color 0.2s',
+                                  textDecoration: 'underline'
+                                }}
+                              >
+                                <MapPin size={14} style={{ marginRight: '6px', flexShrink: 0 }} />
+                                <span>{biz.businessAddress}</span>
+                                <Navigation size={12} style={{ marginLeft: '4px' }} />
+                              </div>
+                              
+                              {/* Phone */}
+                              <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                marginBottom: '6px',
+                                color: '#6b7280',
+                                fontSize: '14px'
+                              }}>
+                                <Phone size={14} style={{ marginRight: '6px' }} />
+                                <span>{biz.phone || 'Phone not available'}</span>
+                              </div>
+                              
+                              {/* Working Hours */}
+                              <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                marginBottom: '12px',
+                                color: '#6b7280',
+                                fontSize: '14px'
+                              }}>
+                                <Clock size={14} style={{ marginRight: '6px' }} />
+                                <span>{biz.workingHours || '9:00 AM - 7:00 PM'}</span>
+                              </div>
+
+                              {/* SINGLE Reviews Section - Google Style */}
+                              <div style={{
+                                marginBottom: '16px',
+                                padding: '12px 0',
+                                borderBottom: '1px solid #f1f5f9'
+                              }}>
+                                {businessReviewsList.length > 0 ? (
+                                  (() => {
+                                    const totalRating = businessReviewsList.reduce((sum, review) => sum + review.rating, 0);
+                                    const averageRating = totalRating / businessReviewsList.length;
+                                    const isExpanded = expandedReviews[biz._id];
+                                    
+                                    return (
+                                      <div>
+                                        {/* Rating Summary - Always Visible */}
+                                        <div 
+                                          onClick={() => setExpandedReviews(prev => ({
+                                            ...prev,
+                                            [biz._id]: !prev[biz._id]
+                                          }))}
+                                          style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '12px',
+                                            cursor: 'pointer',
+                                            padding: '8px',
+                                            borderRadius: '8px',
+                                            transition: 'background-color 0.2s',
+                                            backgroundColor: isExpanded ? '#f8fafc' : 'transparent'
+                                          }}
+                                          onMouseOver={(e) => {
+                                            if (!isExpanded) e.target.style.backgroundColor = '#f8fafc';
+                                          }}
+                                          onMouseOut={(e) => {
+                                            if (!isExpanded) e.target.style.backgroundColor = 'transparent';
+                                          }}
+                                        >
+                                          <span style={{ 
+                                            fontSize: '24px', 
+                                            fontWeight: '700', 
+                                            color: '#1f2937' 
+                                          }}>
+                                            {averageRating.toFixed(1)}
+                                          </span>
+                                          
+                                          <div style={{ 
+                                            display: 'flex', 
+                                            alignItems: 'center', 
+                                            gap: '4px' 
+                                          }}>
+                                            {[1, 2, 3, 4, 5].map(star => (
+                                              <span 
+                                                key={star}
+                                                style={{ 
+                                                  color: star <= Math.round(averageRating) ? '#fbbf24' : '#e5e7eb',
+                                                  fontSize: '20px'
+                                                }}
+                                              >
+                                                ★
+                                              </span>
+                                            ))}
+                                          </div>
+                                          
+                                          <span style={{ 
+                                            fontSize: '14px', 
+                                            color: '#1e40af',
+                                            fontWeight: '500',
+                                            textDecoration: 'underline'
+                                          }}>
+                                            {businessReviewsList.length} {businessReviewsList.length === 1 ? 'review' : 'reviews'}
+                                          </span>
+
+                                          {/* Expand/Collapse Icon */}
+                                          <div style={{
+                                            marginLeft: 'auto',
+                                            fontSize: '16px',
+                                            color: '#6b7280',
+                                            transition: 'transform 0.2s',
+                                            transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)'
+                                          }}>
+                                            ▼
+                                          </div>
+                                        </div> {/* This should close the main rating summary div */}
+
+                                        {/* Expandable Reviews Container */}
+                                        {isExpanded && (
+                                          <div 
+                                            style={{
+                                              marginTop: '12px',
+                                              maxHeight: '400px',
+                                              overflowY: 'auto',
+                                              border: '1px solid #e5e7eb',
+                                              borderRadius: '12px',
+                                              backgroundColor: '#fafafa',
+                                              animation: 'slideDown 0.3s ease-out'
+                                            }}
+                                          >
+                                            {businessReviewsList.map((review, idx) => (
+                                              <div
+                                                key={idx}
+                                                style={{
+                                                  padding: '16px',
+                                                  borderBottom: idx < businessReviewsList.length - 1 ? '1px solid #e5e7eb' : 'none',
+                                                  backgroundColor: 'white',
+                                                  margin: '8px',
+                                                  borderRadius: '8px',
+                                                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                                                }}
+                                              >
+                                                {/* Review Header */}
+                                                <div style={{
+                                                  display: 'flex',
+                                                  alignItems: 'flex-start',
+                                                  gap: '12px',
+                                                  marginBottom: '8px'
+                                                }}>
+                                                  {/* Customer Avatar */}
+                                                  <div style={{
+                                                    width: '40px',
+                                                    height: '40px',
+                                                    borderRadius: '50%',
+                                                    background: 'linear-gradient(135deg, #667eea, #764ba2)',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    color: 'white',
+                                                    fontWeight: 'bold',
+                                                    fontSize: '16px',
+                                                    flexShrink: 0
+                                                  }}>
+                                                    {review.customerName?.charAt(0) || 'C'}
+                                                  </div>
+
+                                                  {/* Review Content */}
+                                                  <div style={{ flex: 1 }}>
+                                                    {/* Customer Name & Date */}
+                                                    <div style={{
+                                                      display: 'flex',
+                                                      alignItems: 'center',
+                                                      justifyContent: 'space-between',
+                                                      marginBottom: '6px'
+                                                    }}>
+                                                      <h4 style={{
+                                                        margin: 0,
+                                                        fontSize: '15px',
+                                                        fontWeight: '600',
+                                                        color: '#1f2937'
+                                                      }}>
+                                                        {review.customerName || 'Customer'}
+                                                      </h4>
+                                                      <span style={{
+                                                        fontSize: '12px',
+                                                        color: '#6b7280'
+                                                      }}>
+                                                        {review.daysAgo !== undefined ? 
+                                                          `${review.daysAgo === 0 ? 'Today' : `${review.daysAgo} days ago`}` :
+                                                          new Date(review.ratedAt).toLocaleDateString()
+                                                        }
+                                                      </span>
+                                                    </div>
+
+                                                    {/* Rating Stars */}
+                                                    <div style={{
+                                                      display: 'flex',
+                                                      alignItems: 'center',
+                                                      gap: '8px',
+                                                      marginBottom: '8px'
+                                                    }}>
+                                                      <div style={{ display: 'flex', color: '#fbbf24', fontSize: '14px' }}>
+                                                        {[1, 2, 3, 4, 5].map(star => (
+                                                          <span 
+                                                            key={star}
+                                                            style={{ 
+                                                              color: star <= review.rating ? '#fbbf24' : '#e5e7eb'
+                                                            }}
+                                                          >
+                                                            ★
+                                                          </span>
+                                                        ))}
+                                                      </div>
+                                                      <span style={{
+                                                        fontSize: '12px',
+                                                        fontWeight: '600',
+                                                        color: '#059669',
+                                                        background: '#f0fdf4',
+                                                        padding: '2px 6px',
+                                                        borderRadius: '4px'
+                                                      }}>
+                                                        {review.rating}/5
+                                                      </span>
+                                                    </div>
+
+                                                    {/* Service Tag */}
+                                                    <div style={{
+                                                      display: 'inline-block',
+                                                      fontSize: '12px',
+                                                      color: '#7c3aed',
+                                                      background: '#f3e8ff',
+                                                      padding: '4px 8px',
+                                                      borderRadius: '12px',
+                                                      fontWeight: '500',
+                                                      marginBottom: '8px',
+                                                      border: '1px solid #e9d5ff'
+                                                    }}>
+                                                      💄 {review.service}
+                                                    </div>
+
+                                                    {/* Review Text */}
+                                                    {review.notes && (
+                                                      <p style={{
+                                                        margin: 0,
+                                                        fontSize: '14px',
+                                                        color: '#374151',
+                                                        lineHeight: '1.5',
+                                                        background: '#f8fafc',
+                                                        padding: '8px 12px',
+                                                        borderRadius: '8px',
+                                                        border: '1px solid #e2e8f0',
+                                                        fontStyle: 'italic'
+                                                      }}>
+                                                        "{review.notes}"
+                                                      </p>
+                                                    )}
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            ))}
+
+                                            {/* Footer */}
+                                            <div style={{
+                                              padding: '12px',
+                                              textAlign: 'center',
+                                              backgroundColor: '#f9fafb',
+                                              borderTop: '1px solid #e5e7eb'
+                                            }}>
+                                              <button
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  navigate(`/salon/${biz._id}`);
+                                                }}
+                                                style={{
+                                                  fontSize: '14px',
+                                                  color: '#1e40af',
+                                                  background: 'none',
+                                                  border: 'none',
+                                                  cursor: 'pointer',
+                                                  fontWeight: '600',
+                                                  padding: '8px 16px',
+                                                  borderRadius: '6px',
+                                                  transition: 'background-color 0.2s'
+                                                }}
+                                                onMouseOver={(e) => e.target.style.backgroundColor = '#eff6ff'}
+                                                onMouseOut={(e) => e.target.style.backgroundColor = 'transparent'}
+                                              >
+                                                View Business Details →
+                                              </button>
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })()
+                                ) : (
+                                  <div style={{
+                                    textAlign: 'center',
+                                    padding: '20px',
+                                    color: '#6b7280',
+                                    backgroundColor: '#f9fafb',
+                                    borderRadius: '8px',
+                                    border: '1px solid #e5e7eb'
+                                  }}>
+                                    <div style={{ fontSize: '24px', marginBottom: '8px' }}>⭐</div>
+                                    <p style={{ margin: '0 0 8px 0', fontWeight: '500' }}>No reviews yet</p>
+                                    <p style={{ margin: 0, fontSize: '12px' }}>Be the first to review this business!</p>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Services - Now clickable */}
+                              {biz.services && biz.services.length > 0 && (
+                                <div style={{ marginBottom: '16px' }}>
+                                  <p style={{
+                                    margin: '0 0 6px 0',
+                                    fontSize: '13px',
+                                    fontWeight: '600',
+                                    color: '#4b5563'
+                                  }}>
+                                    Services Available (Click to Book):
+                                  </p>
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                    {biz.services.map((service, idx) => (
+                                      <button
+                                        key={idx}
+                                        onClick={() => handleServiceSelect(biz, service)}
+                                        style={{
+                                          backgroundColor: '#eff6ff',
+                                          color: '#1e40af',
+                                          padding: '4px 8px',
+                                          borderRadius: '12px',
+                                          fontSize: '11px',
+                                          fontWeight: '500',
+                                          border: 'none',
+                                          cursor: 'pointer',
+                                          transition: 'all 0.2s',
+                                        }}
+                                        onMouseOver={(e) => {
+                                          e.target.style.backgroundColor = '#dbeafe';
+                                          e.target.style.transform = 'scale(1.05)';
+                                        }}
+                                        onMouseOut={(e) => {
+                                          e.target.style.backgroundColor = '#eff6ff';
+                                          e.target.style.transform = 'scale(1)';
+                                        }}
+                                      >
+                                        {service}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Action Buttons */}
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                <button 
+                                  onClick={() => navigate(`/salon/${biz._id}`)}
+                                  style={{
+                                    flex: 1,
+                                    padding: '10px 16px',
+                                    border: '1px solid #d1d5db',
+                                    backgroundColor: 'white',
+                                    color: '#374151',
+                                    borderRadius: '6px',
+                                    cursor: 'pointer',
+                                    fontSize: '14px'
+                                  }}
+                                >
+                                  View Details
+                                </button>
+                                <button 
+                                  onClick={() => openInNavigationApp(biz.businessAddress)}
+                                  style={{
+                                    padding: '10px 12px',
+                                    border: '1px solid #10b981',
+                                    backgroundColor: '#10b981',
+                                    color: 'white',
+                                    borderRadius: '6px',
+                                    cursor: 'pointer',
+                                    fontSize: '14px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '4px'
+                                  }}
+                                >
+                                  <Navigation size={14} />
+                                  Route
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Appointments Tab */}
+          {activeTab === 'appointments' && (
+            <div className="appointments-content">
+              {/* Add back button at the top of appointments content */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '24px'
+              }}>
+                <div className="content-header">
+                  <h2 style={{ fontSize: '24px', fontWeight: '600', color: '#1f2937', margin: 0 }}>
+                    My appointments
+                  </h2>
+                </div>
+              </div>
+
+              {appointments.length === 0 ? (
+                <div className="no-appointments" style={{ 
+                  backgroundColor: '#f9fafb', 
+                  border: '1px solid #e5e7eb', 
+                  borderRadius: '12px', 
+                  padding: '40px',
+                  textAlign: 'center'
+                }}>
+                  <CalendarDays size={48} style={{ color: '#9ca3af', marginBottom: '16px' }} />
+                  <h3 style={{ color: '#374151', marginBottom: '8px' }}>No appointments yet</h3>
+                  <p style={{ color: '#6b7280', marginBottom: '20px' }}>Book your first appointment to get started</p>
+                  <button 
+                    onClick={() => setActiveTab('browse')}
+                    style={{ 
+                      padding: '12px 24px', 
+                      backgroundColor: '#3b82f6', 
+                      color: '#fff', 
+                      borderRadius: '8px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      fontWeight: '500'
+                    }}
+                  >
+                    Browse Services
+                  </button>
+                </div>
+              ) : (
+                <div className="appointments-list" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {appointments.map(app => (
+                    <div 
+                      key={app._id} 
+                      onClick={() => handleAppointmentClick(app)}
+                      style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '6px',
-                        color: '#6b7280',
-                        fontSize: '14px',
-                        marginBottom: '8px'
+                        backgroundColor: 'white',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '12px',
+                        padding: '20px',
+                        gap: '20px',
+                        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.1)';
+                        e.currentTarget.style.transform = 'translateY(0)';
+                      }}
+                    >
+                      {/* Image */}
+                      <div style={{
+                        width: '80px',
+                        height: '80px',
+                        borderRadius: '12px',
+                        overflow: 'hidden',
+                        backgroundColor: '#f3f4f6',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0
                       }}>
-                        <span style={{ fontWeight: '500' }}>Address:</span>
-                        {app.businessAddress && app.businessAddress !== 'Address not available' ? (
-                          <span 
-                            onClick={() => handleAddressClick(app.businessAddress, app.businessName)}
-                            style={{
-                              color: '#1e40af',
-                              cursor: 'pointer',
-                              textDecoration: 'underline'
-                            }}
-                          >
-                            {app.businessAddress}
-                          </span>
+                        {app.serviceImageUrl ? (
+                          <img
+                            src={app.serviceImageUrl}
+                            alt={app.service || 'Service'}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
                         ) : (
-                          <span style={{ color: '#ef4444' }}>Address not available</span>
+                          <User size={32} style={{ color: '#9ca3af' }} />
                         )}
                       </div>
 
-                      {/* Date & Time - FIXED */}
-                      <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        color: '#6b7280',
-                        fontSize: '14px'
+                      {/* Main Content */}
+                      <div style={{ flex: 1 }}>
+                        <h3 style={{ 
+                          margin: '0 0 4px 0', 
+                          fontSize: '18px', 
+                          fontWeight: '600', 
+                          color: '#1f2937' 
+                        }}>
+                          {app.businessName || app.businessEmail || 'Business Name Not Available'}
+                        </h3>
+                        <p style={{ 
+                          margin: '0 0 8px 0', 
+                          fontSize: '14px', 
+                          color: '#6b7280' 
+                        }}>
+                          {app.service || 'Service not specified'}
+                        </p>
+
+                        {/* Address */}
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          color: '#6b7280',
+                          fontSize: '14px',
+                          marginBottom: '8px'
+                        }}>
+                          <span style={{ fontWeight: '500' }}>Address:</span>
+                          {app.businessAddress && app.businessAddress !== 'Address not available' ? (
+                            <span 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAddressClick(app.businessAddress, app.businessName);
+                              }}
+                              style={{
+                                color: '#1e40af',
+                                cursor: 'pointer',
+                                textDecoration: 'underline'
+                              }}
+                            >
+                              {app.businessAddress}
+                            </span>
+                          ) : (
+                            <span style={{ color: '#ef4444' }}>Address not available</span>
+                          )}
+                        </div>
+
+                        {/* Date & Time */}
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          color: '#6b7280',
+                          fontSize: '14px'
+                        }}>
+                          <span style={{ fontWeight: '500' }}>Date & Time:</span>
+                          <span>
+                            {app.date ? new Date(app.date).toLocaleDateString('en-GB', { 
+                              day: '2-digit', 
+                              month: 'short', 
+                              year: 'numeric' 
+                            }) : 'Date not available'} | {app.time ? formatTimeFor12Hour(app.time) : 'Time not available'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Status & Actions */}
+                      <div style={{ 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        alignItems: 'flex-end', 
+                        gap: '8px',
+                        minWidth: '120px'
                       }}>
-                        <span style={{ fontWeight: '500' }}>Date & Time:</span>
-                        <span>
-                          {new Date(app.date).toLocaleDateString('en-GB', { 
-                            day: '2-digit', 
-                            month: 'short', 
-                            year: 'numeric' 
-                          })} | {formatTimeFor12Hour(app.time)}
-                        </span>
+                        {/* Status Badge */}
+                        {app.status === 'pending' && (
+                          <span style={{ 
+                            backgroundColor: '#fef3c7', 
+                            color: '#d97706', 
+                            padding: '6px 12px', 
+                            borderRadius: '20px', 
+                            fontSize: '12px', 
+                            fontWeight: '600'
+                          }}>
+                            PENDING
+                          </span>
+                        )}
+                        {app.status === 'accepted' && (
+                          <span style={{ 
+                            backgroundColor: '#d1fae5', 
+                            color: '#059669', 
+                            padding: '6px 12px', 
+                            borderRadius: '20px', 
+                            fontSize: '12px', 
+                            fontWeight: '600'
+                          }}>
+                            CONFIRMED
+                          </span>
+                        )}
+                        {app.status === 'completed' && (
+                          <span style={{ 
+                            backgroundColor: '#dbeafe', 
+                            color: '#1d4ed8', 
+                            padding: '6px 12px', 
+                            borderRadius: '20px', 
+                            fontSize: '12px', 
+                            fontWeight: '600'
+                          }}>
+                            COMPLETED
+                          </span>
+                        )}
+                        {app.status === 'cancelled' && (
+                          <span style={{ 
+                            backgroundColor: '#fee2e2', 
+                            color: '#dc2626', 
+                            padding: '6px 12px', 
+                            borderRadius: '20px', 
+                            fontSize: '12px', 
+                            fontWeight: '600'
+                          }}>
+                            CANCELLED
+                          </span>
+                        )}
+
+                        {/* Rating Action */}
+                        {app.status === 'completed' && (!app.rating || !app.rating.rating) && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setRatingModal(app);
+                            }}
+                            style={{
+                              backgroundColor: '#eff6ff',
+                              border: '1px solid #3b82f6',
+                              color: '#3b82f6',
+                              padding: '6px 12px',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              fontSize: '12px',
+                              fontWeight: '500'
+                            }}
+                          >
+                            Rate Service
+                          </button>
+                        )}
+                        
+                        {app.status === 'completed' && app.rating && app.rating.rating && (
+                          <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: '14px', color: '#fbbf24', marginBottom: '2px' }}>
+                              {'★'.repeat(app.rating.rating)}{'☆'.repeat(5 - app.rating.rating)}
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#059669', fontWeight: '500' }}>
+                              Rated {app.rating.rating}/5
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
-
-                    {/* Status & Actions - Same as before */}
-                    <div style={{ 
-                      display: 'flex', 
-                      flexDirection: 'column', 
-                      alignItems: 'flex-end', 
-                      gap: '8px',
-                      minWidth: '120px'
-                    }}>
-                      {/* Status Badge */}
-                      {app.status === 'pending' && (
-                        <span style={{ 
-                          backgroundColor: '#fef3c7', 
-                          color: '#d97706', 
-                          padding: '6px 12px', 
-                          borderRadius: '20px', 
-                          fontSize: '12px', 
-                          fontWeight: '600'
-                        }}>
-                          PENDING
-                        </span>
-                      )}
-                      {app.status === 'accepted' && (
-                        <span style={{ 
-                          backgroundColor: '#d1fae5', 
-                          color: '#059669', 
-                          padding: '6px 12px', 
-                          borderRadius: '20px', 
-                          fontSize: '12px', 
-                          fontWeight: '600'
-                        }}>
-                          CONFIRMED
-                        </span>
-                      )}
-                      {app.status === 'completed' && (
-                        <span style={{ 
-                          backgroundColor: '#dbeafe', 
-                          color: '#1d4ed8', 
-                          padding: '6px 12px', 
-                          borderRadius: '20px', 
-                          fontSize: '12px', 
-                          fontWeight: '600'
-                        }}>
-                          COMPLETED
-                        </span>
-                      )}
-                      {app.status === 'cancelled' && (
-                        <span style={{ 
-                          backgroundColor: '#fee2e2', 
-                          color: '#dc2626', 
-                          padding: '6px 12px', 
-                          borderRadius: '20px', 
-                          fontSize: '12px', 
-                          fontWeight: '600'
-                        }}>
-                          CANCELLED
-                        </span>
-                      )}
-
-                      {/* Rating Action */}
-                      {app.status === 'completed' && !app.rating && (
-                        <button
-                          onClick={() => setRatingModal(app)}
-                          style={{
-                            backgroundColor: '#eff6ff',
-                            border: '1px solid #3b82f6',
-                            color: '#3b82f6',
-                            padding: '6px 12px',
-                            borderRadius: '6px',
-                            cursor: 'pointer',
-                            fontSize: '12px',
-                            fontWeight: '500'
-                          }}
-                        >
-                          Rate Service
-                        </button>
-                      )}
-                      
-                      {app.status === 'completed' && app.rating && (
-                        <div style={{ textAlign: 'center' }}>
-                          <div style={{ fontSize: '14px', color: '#fbbf24', marginBottom: '2px' }}>
-                            {'★'.repeat(app.rating)}{'☆'.repeat(5 - app.rating)}
-                          </div>
-                          <div style={{ fontSize: '11px', color: '#059669', fontWeight: '500' }}>
-                            Rated {app.rating}/5
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Rating Modal */}
@@ -1385,21 +1646,6 @@ const CustomerDashboard = () => {
       </div>
     </div>
   );
-};
-
-// Add this function after your other utility functions
-const formatTimeFor12Hour = (time24) => {
-  try {
-    if (!time24) return '';
-    const [hours, minutes] = time24.split(':');
-    const hour = parseInt(hours, 10);
-    const minute = parseInt(minutes, 10);
-    const ampm = hour >= 12 ? 'PM' : 'AM';
-    const hour12 = hour % 12 || 12;
-    return `${hour12}:${minute.toString().padStart(2, '0')} ${ampm}`;
-  } catch (error) {
-    return time24;
-  }
 };
 
 export default CustomerDashboard;

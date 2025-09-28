@@ -11,17 +11,17 @@ const BusinessSchema = new mongoose.Schema({
   imageUrl: { type: String },
   services: [String],
   
-  // ADD THESE RATING FIELDS - MISSING IN YOUR MODEL
-  averageRating: { type: Number, default: 0, min: 0, max: 5 },
-  totalRatings: { type: Number, default: 0 },
-  ratings: [{
-    appointmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Appointment' },
-    rating: { type: Number, required: true, min: 1, max: 5 },
-    customerId: { type: String, required: true },
-    customerName: { type: String },
-    service: { type: String },
-    createdAt: { type: Date, default: Date.now }
-  }]
+  // ADD these fields if missing:
+  averageRating: {
+    type: Number,
+    default: 0,
+    min: 0,
+    max: 5
+  },
+  totalRatings: {
+    type: Number,
+    default: 0
+  }
 }, {
   timestamps: true
 });
