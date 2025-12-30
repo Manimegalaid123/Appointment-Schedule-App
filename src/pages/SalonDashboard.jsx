@@ -566,6 +566,7 @@ const SalonDashboard = () => {
   const [error, setError] = useState('');
   const [salonInfo, setSalonInfo] = useState(null);
   const [notifications, setNotifications] = useState(0);
+  const [breaks, setBreaks] = useState([]);
   
   // Add these missing state variables for Edit Profile
   const [showEditModal, setShowEditModal] = useState(false);
@@ -577,6 +578,17 @@ const SalonDashboard = () => {
   });
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
+  
+  // Break management state
+  const [showBreakModal, setShowBreakModal] = useState(false);
+  const [breakFormData, setBreakFormData] = useState({
+    day: 'Monday',
+    startTime: '13:00',
+    endTime: '14:00',
+    breakType: 'Lunch',
+    description: 'Lunch break',
+    applyToAllDays: false
+  });
 
   // Fetch salon info
   useEffect(() => {
@@ -709,6 +721,120 @@ const SalonDashboard = () => {
       console.error('Error adding service:', err);
     }
   };
+
+  // Delete service
+  const handleDeleteService = async (serviceName) => {
+    if (!salonInfo || !window.confirm(`Delete "${serviceName}" service?`)) return;
+    try {
+      const response = await axios.delete(
+        `http://localhost:5000/api/business/${salonInfo._id}/service/${encodeURIComponent(serviceName)}`
+      );
+      if (response.data.success) {
+        setSalonInfo(prev => ({
+          ...prev,
+          services: response.data.business.services
+        }));
+      }
+    } catch (err) {
+      console.error('Error deleting service:', err);
+      alert('Failed to delete service');
+    }
+  };
+
+  // Add break/lunch time
+  const handleAddBreak = async () => {
+    if (!salonInfo) return;
+    try {
+      // If applying to all days, send each day separately
+      if (breakFormData.applyToAllDays) {
+        const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+        
+        for (const day of days) {
+          const response = await axios.post(
+            `http://localhost:5000/api/business/${salonInfo._id}/breaks`,
+            {
+              day,
+              startTime: breakFormData.startTime,
+              endTime: breakFormData.endTime,
+              breakType: breakFormData.breakType,
+              description: breakFormData.description
+            }
+          );
+          
+          if (response.data.success) {
+            setBreaks(response.data.business.breaks || []);
+          }
+        }
+        
+        setShowBreakModal(false);
+        setBreakFormData({
+          day: 'Monday',
+          startTime: '13:00',
+          endTime: '14:00',
+          breakType: 'Lunch',
+          description: 'Lunch break',
+          applyToAllDays: false
+        });
+        alert('Break added for all days successfully!');
+      } else {
+        const response = await axios.post(
+          `http://localhost:5000/api/business/${salonInfo._id}/breaks`,
+          breakFormData
+        );
+        if (response.data.success) {
+          setBreaks(response.data.business.breaks || []);
+          setShowBreakModal(false);
+          setBreakFormData({
+            day: 'Monday',
+            startTime: '13:00',
+            endTime: '14:00',
+            breakType: 'Lunch',
+            description: 'Lunch break',
+            applyToAllDays: false
+          });
+          alert('Break added successfully!');
+        }
+      }
+    } catch (err) {
+      console.error('Error adding break:', err);
+      alert('Failed to add break');
+    }
+  };
+
+  // Delete break
+  const handleDeleteBreak = async (breakId) => {
+    if (!salonInfo || !window.confirm('Delete this break?')) return;
+    try {
+      const response = await axios.delete(
+        `http://localhost:5000/api/business/${salonInfo._id}/breaks/${breakId}`
+      );
+      if (response.data.success) {
+        setBreaks(response.data.business.breaks || []);
+      }
+    } catch (err) {
+      console.error('Error deleting break:', err);
+      alert('Failed to delete break');
+    }
+  };
+
+  // Fetch breaks
+  useEffect(() => {
+    if (salonInfo?._id) {
+      const fetchBreaks = async () => {
+        try {
+          const response = await axios.get(
+            `http://localhost:5000/api/business/${salonInfo._id}/breaks`
+          );
+          if (response.data.success) {
+            setBreaks(response.data.breaks || []);
+          }
+        } catch (err) {
+          console.error('Error fetching breaks:', err);
+        }
+      };
+      fetchBreaks();
+    }
+  }, [salonInfo?._id]);
 
   // Open edit modal with current data
   const openEditModal = () => {
@@ -1454,7 +1580,27 @@ const SalonDashboard = () => {
                     <div className="salon-services-grid">
                       {salonInfo.services.map((service, i) => (
                         <div key={i} className="salon-service-item">
-                          <Scissors size={16} /> {service}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <Scissors size={16} /> {service}
+                            </div>
+                            <button
+                              onClick={() => handleDeleteService(service)}
+                              style={{
+                                background: '#fee2e2',
+                                border: 'none',
+                                color: '#dc2626',
+                                padding: '4px 8px',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontSize: '12px',
+                                fontWeight: '500'
+                              }}
+                              title="Delete service"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1484,6 +1630,229 @@ const SalonDashboard = () => {
                       </button>
                     </div>
                   </div>
+
+                  <div className="salon-breaks-section" style={{ marginTop: '2rem' }}>
+                    <h3 className="salon-section-title">Break Times & Leaves</h3>
+                    <p style={{ fontSize: '0.9rem', color: '#666', marginBottom: '1rem' }}>
+                      Set lunch breaks, leaves, or other unavailable times. Customers won't be able to book during these times.
+                    </p>
+                    
+                    <div className="salon-breaks-list" style={{ marginBottom: '1rem' }}>
+                      {breaks.length === 0 ? (
+                        <p style={{ color: '#999', fontStyle: 'italic' }}>No breaks set yet</p>
+                      ) : (
+                        breaks.map((breakItem, idx) => (
+                          <div key={idx} style={{
+                            background: '#f5f5f5',
+                            padding: '1rem',
+                            borderRadius: '8px',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: '0.5rem',
+                            border: '1px solid #ddd'
+                          }}>
+                            <div>
+                              <strong>{breakItem.day}</strong> - {breakItem.startTime} to {breakItem.endTime}
+                              <br />
+                              <span style={{ fontSize: '0.85rem', color: '#666' }}>
+                                {breakItem.breakType}: {breakItem.description}
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => handleDeleteBreak(breakItem._id)}
+                              style={{
+                                background: '#fee2e2',
+                                border: 'none',
+                                color: '#dc2626',
+                                padding: '6px 12px',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontSize: '12px',
+                                fontWeight: '500'
+                              }}
+                            >
+                              <X size={14} style={{ marginRight: '4px' }} /> Remove
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    <button
+                      onClick={() => setShowBreakModal(true)}
+                      style={{
+                        background: '#50C9CE',
+                        color: 'white',
+                        border: 'none',
+                        padding: '10px 16px',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontWeight: '500',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}
+                    >
+                      <Plus size={16} /> Add Break Time
+                    </button>
+                  </div>
+
+                  {/* Break Modal */}
+                  {showBreakModal && (
+                    <div style={{
+                      position: 'fixed',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      background: 'rgba(0,0,0,0.5)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      zIndex: 1000
+                    }}>
+                      <div style={{
+                        background: 'white',
+                        padding: '2rem',
+                        borderRadius: '12px',
+                        width: '90%',
+                        maxWidth: '500px'
+                      }}>
+                        <h3 style={{ marginTop: 0 }}>Add Break Time</h3>
+                        
+                        <div style={{ marginBottom: '1rem', padding: '12px', background: '#f0f9ff', borderRadius: '6px', border: '1px solid #bfdbfe' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', margin: 0 }}>
+                            <input
+                              type="checkbox"
+                              checked={breakFormData.applyToAllDays}
+                              onChange={(e) => setBreakFormData({ ...breakFormData, applyToAllDays: e.target.checked })}
+                              style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                            />
+                            <span style={{ fontWeight: '500', color: '#1e40af' }}>Apply to All Days (Mon - Sun)</span>
+                          </label>
+                        </div>
+                        
+                        {!breakFormData.applyToAllDays && (
+                          <div style={{ marginBottom: '1rem' }}>
+                            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Day:</label>
+                            <select
+                              value={breakFormData.day}
+                              onChange={(e) => setBreakFormData({ ...breakFormData, day: e.target.value })}
+                              style={{
+                                width: '100%',
+                                padding: '8px',
+                                border: '1px solid #ddd',
+                                borderRadius: '6px'
+                              }}
+                            >
+                              {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => (
+                                <option key={day} value={day}>{day}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
+                        <div style={{ marginBottom: '1rem', display: 'flex', gap: '1rem' }}>
+                          <div style={{ flex: 1 }}>
+                            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Start Time:</label>
+                            <input
+                              type="time"
+                              value={breakFormData.startTime}
+                              onChange={(e) => setBreakFormData({ ...breakFormData, startTime: e.target.value })}
+                              style={{
+                                width: '100%',
+                                padding: '8px',
+                                border: '1px solid #ddd',
+                                borderRadius: '6px',
+                                boxSizing: 'border-box'
+                              }}
+                            />
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>End Time:</label>
+                            <input
+                              type="time"
+                              value={breakFormData.endTime}
+                              onChange={(e) => setBreakFormData({ ...breakFormData, endTime: e.target.value })}
+                              style={{
+                                width: '100%',
+                                padding: '8px',
+                                border: '1px solid #ddd',
+                                borderRadius: '6px',
+                                boxSizing: 'border-box'
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        <div style={{ marginBottom: '1rem' }}>
+                          <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Break Type:</label>
+                          <select
+                            value={breakFormData.breakType}
+                            onChange={(e) => setBreakFormData({ ...breakFormData, breakType: e.target.value })}
+                            style={{
+                              width: '100%',
+                              padding: '8px',
+                              border: '1px solid #ddd',
+                              borderRadius: '6px'
+                            }}
+                          >
+                            <option value="Lunch">Lunch Break</option>
+                            <option value="Leave">Leave</option>
+                            <option value="Break">Short Break</option>
+                          </select>
+                        </div>
+
+                        <div style={{ marginBottom: '1rem' }}>
+                          <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Description:</label>
+                          <input
+                            type="text"
+                            value={breakFormData.description}
+                            onChange={(e) => setBreakFormData({ ...breakFormData, description: e.target.value })}
+                            placeholder="e.g., Lunch break, Doctor appointment"
+                            style={{
+                              width: '100%',
+                              padding: '8px',
+                              border: '1px solid #ddd',
+                              borderRadius: '6px',
+                              boxSizing: 'border-box'
+                            }}
+                          />
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                          <button
+                            onClick={() => setShowBreakModal(false)}
+                            style={{
+                              padding: '10px 16px',
+                              border: '1px solid #ddd',
+                              background: 'white',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              fontWeight: '500'
+                            }}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={handleAddBreak}
+                            style={{
+                              padding: '10px 16px',
+                              background: '#50C9CE',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              fontWeight: '500'
+                            }}
+                          >
+                            Add Break
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
               {activeTab === 'settings' && (

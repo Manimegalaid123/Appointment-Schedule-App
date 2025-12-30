@@ -92,3 +92,45 @@ exports.getBookedTimes = async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
+
+// Get break times for a specific date
+exports.getBreakTimes = async (req, res) => {
+  try {
+    const { businessEmail, date } = req.query;
+    
+    if (!businessEmail || !date) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Missing required parameters' 
+      });
+    }
+
+    const business = await Business.findOne({ email: businessEmail });
+    if (!business) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Business not found' 
+      });
+    }
+
+    // Get the day of the week from the date
+    const dateObj = new Date(date);
+    const dayOfWeek = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
+
+    // Filter breaks for this day
+    const breaksForDay = business.breaks.filter(br => br.day === dayOfWeek);
+    
+    // Convert breaks to time slots format
+    const breakTimes = breaksForDay.map(br => ({
+      startTime: br.startTime,
+      endTime: br.endTime,
+      breakType: br.breakType,
+      description: br.description
+    }));
+
+    res.json({ success: true, breakTimes, dayOfWeek });
+  } catch (err) {
+    console.error('Error fetching break times:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};

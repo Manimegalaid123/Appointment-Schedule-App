@@ -70,6 +70,56 @@ const SalonDetails = () => {
     return (total / reviews.length).toFixed(1);
   };
 
+  // Check if salon is currently open
+  const isCurrentlyOpen = () => {
+    if (!salon || !salon.workingHours) return false;
+
+    const now = new Date();
+    const currentTime = now.getHours() * 60 + now.getMinutes(); // minutes since midnight
+
+    // Parse working hours string (e.g., "8:00 AM - 6:00 PM" or "08:00 - 18:00")
+    const workingHours = salon.workingHours.trim();
+    const timeParts = workingHours.split('-').map(p => p.trim());
+    
+    if (timeParts.length !== 2) return false;
+
+    // Convert time string to minutes since midnight
+    const timeToMinutes = (timeStr) => {
+      timeStr = timeStr.trim();
+      
+      // Try 24-hour format first (HH:MM)
+      let match = timeStr.match(/^(\d{1,2}):(\d{2})$/);
+      if (match) {
+        return parseInt(match[1]) * 60 + parseInt(match[2]);
+      }
+
+      // Try 12-hour format (H:MM AM/PM or HH:MM AM/PM)
+      match = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+      if (match) {
+        let hours = parseInt(match[1]);
+        const minutes = parseInt(match[2]);
+        const meridiem = match[3]?.toUpperCase();
+
+        if (meridiem) {
+          if (meridiem === 'PM' && hours !== 12) {
+            hours += 12;
+          } else if (meridiem === 'AM' && hours === 12) {
+            hours = 0;
+          }
+        }
+
+        return hours * 60 + minutes;
+      }
+
+      return 0;
+    };
+
+    const openTime = timeToMinutes(timeParts[0]);
+    const closeTime = timeToMinutes(timeParts[1]);
+
+    return currentTime >= openTime && currentTime < closeTime;
+  };
+
   const renderStars = (rating, size = 16) => {
     const stars = [];
     const r = Math.round(Number(rating) || 0);
@@ -228,7 +278,9 @@ const SalonDetails = () => {
               <div className="salon-info-content">
                 <h3 className="salon-info-title">Working Hours</h3>
                 <p className="salon-info-text">{salon.workingHours || '9:00 AM - 7:00 PM'}</p>
-                <span className="salon-open-status">Open Now</span>
+                <span className={`salon-open-status ${isCurrentlyOpen() ? 'open' : 'closed'}`}>
+                  {isCurrentlyOpen() ? 'Open Now' : 'Closed'}
+                </span>
               </div>
             </div>
           </div>

@@ -10,7 +10,17 @@ const BusinessSchema = new mongoose.Schema({
   imageUrl: { type: String },
   services: [String],
   
-  // ADD these fields if missing:
+  // Break times management
+  breaks: [
+    {
+      day: { type: String, enum: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] },
+      startTime: String, // "13:00" format (1 PM)
+      endTime: String,   // "14:00" format (2 PM)
+      breakType: { type: String, enum: ['Lunch', 'Leave', 'Break'] },
+      description: String
+    }
+  ],
+  
   averageRating: {
     type: Number,
     default: 0,
@@ -27,13 +37,9 @@ const BusinessSchema = new mongoose.Schema({
 
 // Method to calculate average rating
 BusinessSchema.methods.calculateAverageRating = function() {
-  if (this.ratings.length === 0) {
+  if (this.ratings && this.ratings.length === 0) {
     this.averageRating = 0;
     this.totalRatings = 0;
-  } else {
-    const total = this.ratings.reduce((sum, rating) => sum + rating.rating, 0);
-    this.averageRating = Math.round((total / this.ratings.length) * 10) / 10;
-    this.totalRatings = this.ratings.length;
   }
   return this.save();
 };

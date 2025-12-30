@@ -120,6 +120,9 @@ router.post('/update-status/:id', async (req, res) => {
 // Get booked times
 router.get('/booked-times/check', appointmentController.getBookedTimes);
 
+// Get break times for a specific date
+router.get('/break-times/check', appointmentController.getBreakTimes);
+
 // Create appointment with business logic
 router.post('/create', async (req, res) => {
   try {

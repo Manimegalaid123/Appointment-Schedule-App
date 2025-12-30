@@ -1,5 +1,64 @@
 import React, { useState, useEffect } from 'react';
 
+function parseWorkingHours(workingHours) {
+  if (!workingHours) {
+    return { start: '09:00', end: '19:00' };
+  }
+
+  // If it's already an object with start and end, use it
+  if (typeof workingHours === 'object' && workingHours.start && workingHours.end) {
+    return {
+      start: convertTo24Hour(workingHours.start),
+      end: convertTo24Hour(workingHours.end)
+    };
+  }
+
+  // If it's a string like "8:00 AM - 6:00 PM" or "08:00 - 18:00"
+  if (typeof workingHours === 'string') {
+    const parts = workingHours.split('-').map(p => p.trim());
+    if (parts.length === 2) {
+      return {
+        start: convertTo24Hour(parts[0]),
+        end: convertTo24Hour(parts[1])
+      };
+    }
+  }
+
+  // Fallback to default
+  return { start: '09:00', end: '19:00' };
+}
+
+function convertTo24Hour(timeStr) {
+  if (!timeStr) return '09:00';
+  
+  timeStr = timeStr.trim();
+  
+  // If already in 24-hour format (HH:MM)
+  if (/^\d{2}:\d{2}$/.test(timeStr)) {
+    return timeStr;
+  }
+
+  // Parse 12-hour format (e.g., "8:00 AM", "6:00 PM")
+  const regex = /(\d{1,2}):(\d{2})\s*(AM|PM)?/i;
+  const match = timeStr.match(regex);
+  
+  if (!match) return '09:00';
+  
+  let hours = parseInt(match[1], 10);
+  const minutes = match[2];
+  const meridiem = match[3]?.toUpperCase();
+
+  if (meridiem) {
+    if (meridiem === 'PM' && hours !== 12) {
+      hours += 12;
+    } else if (meridiem === 'AM' && hours === 12) {
+      hours = 0;
+    }
+  }
+
+  return `${String(hours).padStart(2, '0')}:${minutes}`;
+}
+
 function generateTimeSlots(start, end) {
   const slots = [];
   let [h, m] = start.split(':').map(Number);
@@ -18,6 +77,17 @@ function generateTimeSlots(start, end) {
   return slots;
 }
 
+// Check if a time slot falls within any break period
+function isTimeInBreak(timeSlot, breaks) {
+  return breaks.some(br => {
+    const slotTime = timeSlot; // "HH:mm" format
+    const startTime = br.startTime; // "HH:mm" format
+    const endTime = br.endTime; // "HH:mm" format
+    
+    return slotTime >= startTime && slotTime < endTime;
+  });
+}
+
 const BookingForm = ({ business, service, workingHours, onClose }) => {
   const [date, setDate] = useState('');
   const [selectedSlot, setSelectedSlot] = useState('');
@@ -25,34 +95,43 @@ const BookingForm = ({ business, service, workingHours, onClose }) => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [bookedSlots, setBookedSlots] = useState([]);
+  const [breakTimes, setBreakTimes] = useState([]);
 
   const customerName = localStorage.getItem('name');
   const customerEmail = localStorage.getItem('email');
 
-  const slots = workingHours
-    ? generateTimeSlots(
-        workingHours.start || '09:00',
-        workingHours.end || '19:00'
-      )
-    : generateTimeSlots('09:00', '19:00');
+  // Parse working hours properly
+  const parsedHours = parseWorkingHours(workingHours);
+  
+  const slots = generateTimeSlots(parsedHours.start, parsedHours.end);
 
-  // Fetch booked slots when date changes
+  // Fetch booked slots and break times when date changes
   useEffect(() => {
     if (!date) {
       setBookedSlots([]);
+      setBreakTimes([]);
       return;
     }
-    const fetchBooked = async () => {
+    const fetchData = async () => {
       try {
-        const res = await fetch(`http://localhost:5000/api/appointments/booked-times/check?businessEmail=${business.email}&service=${service}&date=${date}`);
-        const data = await res.json();
-        if (data.success) setBookedSlots(data.bookedTimes || []);
+        // Fetch booked times
+        const bookedRes = await fetch(`http://localhost:5000/api/appointments/booked-times/check?businessEmail=${business.email}&service=${service}&date=${date}`);
+        const bookedData = await bookedRes.json();
+        if (bookedData.success) setBookedSlots(bookedData.bookedTimes || []);
         else setBookedSlots([]);
-      } catch {
+
+        // Fetch break times
+        const breakRes = await fetch(`http://localhost:5000/api/appointments/break-times/check?businessEmail=${business.email}&date=${date}`);
+        const breakData = await breakRes.json();
+        if (breakData.success) setBreakTimes(breakData.breakTimes || []);
+        else setBreakTimes([]);
+      } catch (err) {
+        console.error('Error fetching availability data:', err);
         setBookedSlots([]);
+        setBreakTimes([]);
       }
     };
-    fetchBooked();
+    fetchData();
   }, [date, business.email, service]);
 
   const handleSubmit = async (e) => {
@@ -110,23 +189,29 @@ const BookingForm = ({ business, service, workingHours, onClose }) => {
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '8px 0' }}>
             {slots.map(slot => {
               const isBooked = bookedSlots.includes(slot);
+              const isDuringBreak = isTimeInBreak(slot, breakTimes);
+              const isUnavailable = isBooked || isDuringBreak;
+              const breakInfo = breakTimes.find(br => slot >= br.startTime && slot < br.endTime);
+              
               return (
                 <button
                   type="button"
                   key={slot}
                   onClick={() => setSelectedSlot(slot)}
-                  disabled={isBooked}
+                  disabled={isUnavailable}
+                  title={isDuringBreak ? `${breakInfo?.breakType || 'Break'}: ${breakInfo?.description || ''}` : isBooked ? 'Already booked' : ''}
                   style={{
-                    background: selectedSlot === slot ? '#6366f1' : isBooked ? '#e5e7eb' : '#f3f4f6',
-                    color: selectedSlot === slot ? '#fff' : isBooked ? '#aaa' : '#222',
+                    background: selectedSlot === slot ? '#6366f1' : isUnavailable ? '#e5e7eb' : '#f3f4f6',
+                    color: selectedSlot === slot ? '#fff' : isUnavailable ? '#aaa' : '#222',
                     border: '1px solid #ddd',
                     borderRadius: 6,
                     padding: '6px 12px',
-                    cursor: isBooked ? 'not-allowed' : 'pointer'
+                    cursor: isUnavailable ? 'not-allowed' : 'pointer'
                   }}
                 >
                   {new Date(`2020-01-01T${slot}`).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  {isBooked ? ' (Booked)' : ''}
+                  {isBooked && ' (Booked)'}
+                  {isDuringBreak && ` (${breakInfo?.breakType || 'Break'})`}
                 </button>
               );
             })}

@@ -214,24 +214,52 @@ const CustomerDashboard = () => {
     }
   };
 
-  const getAvailableTimeSlots = () => {
+  const getAvailableTimeSlots = async () => {
     const allSlots = generateTimeSlots();
     const workingHoursSlots = allSlots.filter(slot => 
       isWithinWorkingHours(slot.value, workingHours.start, workingHours.end)
     );
     
+    // Fetch breaks from salon
+    let breaksForDay = [];
+    if (selectedBusiness?._id) {
+      try {
+        const response = await axios.get(
+          `http://localhost:5000/api/business/${selectedBusiness._id}/breaks`
+        );
+        if (response.data.success && response.data.breaks) {
+          const dayName = new Date(formData.date).toLocaleString('en-US', { weekday: 'long' });
+          breaksForDay = response.data.breaks.filter(b => b.day === dayName);
+        }
+      } catch (err) {
+        console.error('Error fetching breaks:', err);
+      }
+    }
+    
+    // Filter out break times
+    let availableSlots = workingHoursSlots.filter(slot => {
+      const [slotHour, slotMin] = slot.value.split(':');
+      return !breaksForDay.some(breakItem => {
+        const [breakStart, breakEnd] = [breakItem.startTime, breakItem.endTime];
+        const slotTime = slotHour + slotMin;
+        const breakStartTime = breakStart.replace(':', '');
+        const breakEndTime = breakEnd.replace(':', '');
+        return slotTime >= breakStartTime && slotTime < breakEndTime;
+      });
+    });
+    
     if (formData.date === getTodayDate()) {
       const now = new Date();
       const currentTime = now.getHours() * 60 + now.getMinutes();
       
-      return workingHoursSlots.filter(slot => {
+      return availableSlots.filter(slot => {
         const [hours, minutes] = slot.value.split(':').map(num => parseInt(num, 10));
         const slotTime = hours * 60 + minutes;
         return slotTime > currentTime + 30;
       });
     }
     
-    return workingHoursSlots;
+    return availableSlots;
   };
 
   // Event handlers
@@ -610,6 +638,13 @@ const CustomerDashboard = () => {
           margin: '0 auto 32px auto',
           boxSizing: 'border-box'
         }}>
+          <button 
+            className={`nav-tab ${activeTab === 'browse' ? 'active' : ''}`}
+            onClick={() => setActiveTab('browse')}
+          >
+            <Building2 size={20} />
+            <span>Browse Services</span>
+          </button>
           <button 
             className={`nav-tab ${activeTab === 'appointments' ? 'active' : ''}`}
             onClick={() => setActiveTab('appointments')}
@@ -1209,18 +1244,8 @@ const CustomerDashboard = () => {
           {/* Appointments Tab */}
           {activeTab === 'appointments' && (
             <div className="appointments-content">
-              {/* Add back button at the top of appointments content */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                marginBottom: '24px'
-              }}>
-                <div className="content-header">
-                  <h2 style={{ fontSize: '24px', fontWeight: '600', color: '#1f2937', margin: 0 }}>
-                    My appointments
-                  </h2>
-                </div>
+              <div className="content-header">
+                <h2>My Appointments</h2>
               </div>
 
               {appointments.length === 0 ? (

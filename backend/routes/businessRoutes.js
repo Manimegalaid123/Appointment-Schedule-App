@@ -396,4 +396,108 @@ router.post('/update-ratings-direct', async (req, res) => {
   }
 });
 
+// DELETE service from business
+router.delete('/:businessId/service/:serviceName', async (req, res) => {
+  try {
+    const { businessId, serviceName } = req.params;
+    
+    const business = await Business.findByIdAndUpdate(
+      businessId,
+      { $pull: { services: serviceName } },
+      { new: true }
+    );
+    
+    if (!business) {
+      return res.status(404).json({ success: false, message: 'Business not found' });
+    }
+    
+    res.json({ 
+      success: true, 
+      message: 'Service deleted successfully',
+      business 
+    });
+  } catch (error) {
+    console.error('❌ Delete service error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ADD break/lunch time
+router.post('/:businessId/breaks', async (req, res) => {
+  try {
+    const { businessId } = req.params;
+    const { day, startTime, endTime, breakType, description } = req.body;
+    
+    const business = await Business.findByIdAndUpdate(
+      businessId,
+      { 
+        $push: { 
+          breaks: { day, startTime, endTime, breakType, description }
+        }
+      },
+      { new: true }
+    );
+    
+    if (!business) {
+      return res.status(404).json({ success: false, message: 'Business not found' });
+    }
+    
+    res.json({ 
+      success: true, 
+      message: 'Break added successfully',
+      business 
+    });
+  } catch (error) {
+    console.error('❌ Add break error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// DELETE break/lunch time
+router.delete('/:businessId/breaks/:breakId', async (req, res) => {
+  try {
+    const { businessId, breakId } = req.params;
+    
+    const business = await Business.findByIdAndUpdate(
+      businessId,
+      { $pull: { breaks: { _id: breakId } } },
+      { new: true }
+    );
+    
+    if (!business) {
+      return res.status(404).json({ success: false, message: 'Business not found' });
+    }
+    
+    res.json({ 
+      success: true, 
+      message: 'Break deleted successfully',
+      business 
+    });
+  } catch (error) {
+    console.error('❌ Delete break error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET business breaks
+router.get('/:businessId/breaks', async (req, res) => {
+  try {
+    const { businessId } = req.params;
+    
+    const business = await Business.findById(businessId);
+    
+    if (!business) {
+      return res.status(404).json({ success: false, message: 'Business not found' });
+    }
+    
+    res.json({ 
+      success: true, 
+      breaks: business.breaks || []
+    });
+  } catch (error) {
+    console.error('❌ Get breaks error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 module.exports = router;
