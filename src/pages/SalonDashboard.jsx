@@ -1286,7 +1286,7 @@ const SalonDashboard = () => {
                         <Search size={20} />
                         <input
                           type="text"
-                          placeholder="Search appointments..."
+                          
                           value={searchTerm}
                           onChange={(e) => setSearchTerm(e.target.value)}
                           className="salon-search-input"
@@ -1301,7 +1301,7 @@ const SalonDashboard = () => {
                         <option value="pending">Pending</option>
                         <option value="accepted">Confirmed</option>
                         <option value="rejected">Declined</option>
-                        <option value="rescheduled">Rescheduled</option>
+                       
                       </select>
                     </div>
                     <div className="salon-header-actions">
@@ -1392,18 +1392,7 @@ const SalonDashboard = () => {
                                   >
                                     <X size={16} /> Reject
                                   </button>
-                                  <button
-                                    className="salon-action-btn salon-reschedule"
-                                    onClick={() => {
-                                      const newDate = prompt('Enter new date (YYYY-MM-DD):', appointment.date);
-                                      const newTime = prompt('Enter new time:', appointment.time);
-                                      if (newDate && newTime) {
-                                        handleAppointmentAction(appointment._id, 'reschedule', { date: newDate, time: newTime });
-                                      }
-                                    }}
-                                  >
-                                    <RefreshCw size={16} /> Reschedule
-                                  </button>
+                                 
                                 </div>
                               )}
                               {appointment.status === 'accepted' && (
