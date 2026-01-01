@@ -134,3 +134,113 @@ exports.getBreakTimes = async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
+
+// Check appointment reminder status
+exports.checkReminderStatus = async (req, res) => {
+  try {
+    const { email, date, time } = req.query;
+    
+    if (!email || !date || !time) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required parameters (email, date, time)'
+      });
+    }
+
+    const appointment = await Appointment.findOne({
+      customerEmail: email,
+      date: date,
+      time: time
+    });
+
+    if (!appointment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Appointment not found'
+      });
+    }
+
+    const reminderStatus = {
+      success: true,
+      appointment: {
+        customerName: appointment.customerName,
+        service: appointment.service,
+        date: appointment.date,
+        time: appointment.time,
+        businessName: appointment.businessName,
+        status: appointment.status
+      },
+      reminders: {
+        reminder24h: {
+          sent: appointment.remindersSent?.reminder24h || false,
+          sentAt: appointment.remindersSent?.sentAt24h || null
+        },
+        reminder1h: {
+          sent: appointment.remindersSent?.reminder1h || false,
+          sentAt: appointment.remindersSent?.sentAt1h || null
+        }
+      }
+    };
+
+    res.json(reminderStatus);
+  } catch (err) {
+    console.error('Error checking reminder status:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// Test reminder - manually send a reminder email
+exports.testReminder = async (req, res) => {
+  try {
+    const { email, date, time } = req.query;
+    
+    if (!email || !date || !time) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required parameters (email, date, time)'
+      });
+    }
+
+    const appointment = await Appointment.findOne({
+      customerEmail: email,
+      date: date,
+      time: time
+    });
+
+    if (!appointment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Appointment not found'
+      });
+    }
+
+    const business = await Business.findOne({ email: appointment.businessEmail });
+    if (!business) {
+      return res.status(404).json({
+        success: false,
+        message: 'Business not found'
+      });
+    }
+
+    // Import sendReminder function from appointmentReminder
+    const { sendReminder } = require('../utils/appointmentReminder');
+    
+    // Send 1-hour reminder manually
+    const success = await sendReminder(appointment, business, '1');
+
+    res.json({
+      success: success,
+      message: success ? 'Test reminder sent successfully!' : 'Failed to send test reminder',
+      appointment: {
+        customerName: appointment.customerName,
+        customerEmail: appointment.customerEmail,
+        service: appointment.service,
+        date: appointment.date,
+        time: appointment.time
+      }
+    });
+  } catch (err) {
+    console.error('Error sending test reminder:', err);
+    res.status(500).json({ success: false, message: 'Server error', error: err.message });
+  }
+};

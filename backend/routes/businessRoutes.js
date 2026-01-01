@@ -500,4 +500,56 @@ router.get('/:businessId/breaks', async (req, res) => {
   }
 });
 
+// Get business with service durations and buffer time
+router.get('/:businessId/services-with-duration', async (req, res) => {
+  try {
+    const { businessId } = req.params;
+    const business = await Business.findById(businessId);
+    
+    if (!business) {
+      return res.status(404).json({ success: false, message: 'Business not found' });
+    }
+
+    res.json({
+      success: true,
+      services: business.services || [],
+      bufferTime: business.bufferTime || 0,
+      reminderSettings: business.reminderSettings || {}
+    });
+  } catch (error) {
+    console.error('❌ Get services error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Update business buffer time and reminder settings
+router.put('/:businessId/settings', async (req, res) => {
+  try {
+    const { businessId } = req.params;
+    const { bufferTime, reminderSettings } = req.body;
+
+    const business = await Business.findByIdAndUpdate(
+      businessId,
+      {
+        bufferTime: bufferTime || 0,
+        reminderSettings: reminderSettings || {}
+      },
+      { new: true }
+    );
+
+    if (!business) {
+      return res.status(404).json({ success: false, message: 'Business not found' });
+    }
+
+    res.json({
+      success: true,
+      message: 'Settings updated successfully',
+      business
+    });
+  } catch (error) {
+    console.error('❌ Update settings error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 module.exports = router;

@@ -7,6 +7,10 @@ dotenv.config();
 const connectDB = require('./config/db');
 connectDB();
 
+// Initialize reminder scheduler
+const { initializeReminderScheduler } = require('./utils/appointmentReminder');
+initializeReminderScheduler();
+
 const app = express();
 app.use(cors());
 app.use(express.json());

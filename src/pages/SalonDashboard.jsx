@@ -817,6 +817,26 @@ const SalonDashboard = () => {
     }
   };
 
+  // Save appointment settings (buffer time, reminders)
+  const handleSaveAppointmentSettings = async () => {
+    if (!salonInfo) return;
+    try {
+      const response = await axios.put(
+        `http://localhost:5000/api/business/${salonInfo._id}/settings`,
+        {
+          bufferTime: salonInfo.bufferTime || 0,
+          reminderSettings: salonInfo.reminderSettings || {}
+        }
+      );
+      if (response.data.success) {
+        alert('Settings saved successfully!');
+      }
+    } catch (err) {
+      console.error('Error saving appointment settings:', err);
+      alert('Failed to save settings');
+    }
+  };
+
   // Fetch breaks
   useEffect(() => {
     if (salonInfo?._id) {
@@ -1615,6 +1635,200 @@ const SalonDashboard = () => {
                     >
                       <Plus size={16} /> Add New Service
                     </button>
+                  </div>
+
+                  <div className="salon-booking-section" style={{ marginTop: '2rem' }}>
+                    <h3 className="salon-section-title">⏰ Appointment Settings</h3>
+                    
+                    <div style={{ background: '#f8f9fa', padding: '1.5rem', borderRadius: '8px', marginBottom: '1.5rem', border: '1px solid #ddd' }}>
+                      <h4 style={{ marginTop: 0, color: '#1e293b' }}>Buffer Time Between Appointments</h4>
+                      <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '1rem' }}>
+                        Time reserved for cleanup/setup after each appointment (e.g., 15 minutes for sanitizing equipment)
+                      </p>
+                      <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                        <input
+                          type="number"
+                          min="0"
+                          max="60"
+                          value={salonInfo.bufferTime || 0}
+                          onChange={(e) => setSalonInfo({ ...salonInfo, bufferTime: parseInt(e.target.value) || 0 })}
+                          style={{
+                            padding: '8px 12px',
+                            border: '1px solid #ddd',
+                            borderRadius: '6px',
+                            width: '100px',
+                            fontSize: '1rem'
+                          }}
+                          placeholder="0"
+                        />
+                        <span style={{ color: '#666', fontWeight: '500' }}>minutes</span>
+                      </div>
+                    </div>
+
+                    <div style={{ background: '#f8f9fa', padding: '1.5rem', borderRadius: '8px', border: '1px solid #ddd' }}>
+                      <h4 style={{ marginTop: 0, color: '#1e293b' }}>Appointment Reminders</h4>
+                      <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '1rem' }}>
+                        Automatically send reminder emails to customers before their appointments
+                      </p>
+                      
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', margin: 0 }}>
+                          <input
+                            type="checkbox"
+                            checked={salonInfo.reminderSettings?.enableEmailReminder ?? true}
+                            onChange={(e) => setSalonInfo({
+                              ...salonInfo,
+                              reminderSettings: { ...salonInfo.reminderSettings, enableEmailReminder: e.target.checked }
+                            })}
+                            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                          />
+                          <span style={{ fontWeight: '500', color: '#1e293b' }}>Enable Email Reminders</span>
+                        </label>
+
+                        {salonInfo.reminderSettings?.enableEmailReminder !== false && (
+                          <>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', margin: '0 0 0 28px' }}>
+                              <input
+                                type="checkbox"
+                                checked={salonInfo.reminderSettings?.reminderBefore24h ?? true}
+                                onChange={(e) => setSalonInfo({
+                                  ...salonInfo,
+                                  reminderSettings: { ...salonInfo.reminderSettings, reminderBefore24h: e.target.checked }
+                                })}
+                                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                              />
+                              <span style={{ color: '#666', fontSize: '0.95rem' }}>24-hour reminder</span>
+                            </label>
+
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', margin: '0 0 0 28px' }}>
+                              <input
+                                type="checkbox"
+                                checked={salonInfo.reminderSettings?.reminderBefore1h ?? true}
+                                onChange={(e) => setSalonInfo({
+                                  ...salonInfo,
+                                  reminderSettings: { ...salonInfo.reminderSettings, reminderBefore1h: e.target.checked }
+                                })}
+                                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                              />
+                              <span style={{ color: '#666', fontSize: '0.95rem' }}>1-hour reminder</span>
+                            </label>
+                          </>
+                        )}
+                      </div>
+                      
+                      <button
+                        onClick={handleSaveAppointmentSettings}
+                        style={{
+                          marginTop: '1rem',
+                          padding: '10px 16px',
+                          background: '#50C9CE',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontWeight: '500'
+                        }}
+                      >
+                        Save Settings
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="salon-booking-section" style={{ marginTop: '2rem' }}>
+                    <h3 className="salon-section-title">📧 Email Configuration</h3>
+                    <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '1rem' }}>
+                      Configure your salon's Gmail account to send appointment reminders. Leave blank to use default system email.
+                    </p>
+                    
+                    <div style={{ background: '#fff8f0', padding: '1.5rem', borderRadius: '8px', border: '1px solid #fecaca', marginBottom: '1rem' }}>
+                      <h4 style={{ marginTop: 0, color: '#b45309' }}>⚠️ How to Get Gmail App Password:</h4>
+                      <ol style={{ color: '#666', fontSize: '0.9rem', lineHeight: '1.8' }}>
+                        <li>Go to <a href="https://myaccount.google.com" target="_blank" rel="noopener noreferrer">myaccount.google.com</a></li>
+                        <li>Click <strong>Security</strong></li>
+                        <li>Search for <strong>"App passwords"</strong></li>
+                        <li>Select <strong>Mail</strong> and <strong>Windows Computer</strong></li>
+                        <li>Copy the 16-character password (spaces included)</li>
+                      </ol>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      <div>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#1e293b' }}>
+                          Gmail Address:
+                        </label>
+                        <input
+                          type="email"
+                          placeholder="e.g., hari@gmail.com"
+                          value={salonInfo.emailCredentials?.smtpEmail || ''}
+                          onChange={(e) => setSalonInfo({
+                            ...salonInfo,
+                            emailCredentials: { ...salonInfo.emailCredentials, smtpEmail: e.target.value }
+                          })}
+                          style={{
+                            width: '100%',
+                            padding: '10px 12px',
+                            border: '1px solid #ddd',
+                            borderRadius: '6px',
+                            fontSize: '1rem',
+                            boxSizing: 'border-box'
+                          }}
+                        />
+                        <small style={{ color: '#999' }}>Your Gmail address to send reminders from</small>
+                      </div>
+
+                      <div>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#1e293b' }}>
+                          Gmail App Password:
+                        </label>
+                        <input
+                          type="password"
+                          placeholder="16-character app password (with spaces)"
+                          value={salonInfo.emailCredentials?.smtpPassword || ''}
+                          onChange={(e) => setSalonInfo({
+                            ...salonInfo,
+                            emailCredentials: { ...salonInfo.emailCredentials, smtpPassword: e.target.value }
+                          })}
+                          style={{
+                            width: '100%',
+                            padding: '10px 12px',
+                            border: '1px solid #ddd',
+                            borderRadius: '6px',
+                            fontSize: '1rem',
+                            boxSizing: 'border-box'
+                          }}
+                        />
+                        <small style={{ color: '#999' }}>Get this from Gmail app passwords (16 characters)</small>
+                      </div>
+
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', margin: 0 }}>
+                        <input
+                          type="checkbox"
+                          checked={salonInfo.emailCredentials?.useDefaultSMTP ?? true}
+                          onChange={(e) => setSalonInfo({
+                            ...salonInfo,
+                            emailCredentials: { ...salonInfo.emailCredentials, useDefaultSMTP: e.target.checked }
+                          })}
+                          style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                        />
+                        <span style={{ color: '#666' }}>Use default system email (if credentials not provided)</span>
+                      </label>
+
+                      <button
+                        onClick={handleSaveAppointmentSettings}
+                        style={{
+                          marginTop: '1rem',
+                          padding: '10px 16px',
+                          background: '#50C9CE',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontWeight: '500'
+                        }}
+                      >
+                        Save Email Settings
+                      </button>
+                    </div>
                   </div>
 
                   <div className="salon-booking-section">

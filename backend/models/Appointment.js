@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const AppointmentSchema = new mongoose.Schema({
   customerName: { type: String, required: true },
   customerEmail: { type: String, required: true },
-  customerPhone: { type: String, required: false }, // CHANGE: Make this optional
+  customerPhone: { type: String, required: false },
   businessEmail: { type: String, required: true },
   businessName: { type: String },
   businessAddress: { type: String },
@@ -15,6 +15,13 @@ const AppointmentSchema = new mongoose.Schema({
     type: String, 
     enum: ['pending', 'accepted', 'completed', 'cancelled', 'rejected'], 
     default: 'pending' 
+  },
+  // Email reminder tracking
+  remindersSent: {
+    reminder24h: { type: Boolean, default: false, description: '24-hour reminder sent' },
+    reminder1h: { type: Boolean, default: false, description: '1-hour reminder sent' },
+    sentAt24h: { type: Date, default: null },
+    sentAt1h: { type: Date, default: null }
   },
   rating: {
     rating: {

@@ -59,20 +59,35 @@ function convertTo24Hour(timeStr) {
   return `${String(hours).padStart(2, '0')}:${minutes}`;
 }
 
-function generateTimeSlots(start, end) {
+function generateTimeSlots(start, end, serviceDuration = 30, bufferTime = 0) {
   const slots = [];
+  const interval = serviceDuration + bufferTime; // Total time per appointment (service + buffer)
+  
   let [h, m] = start.split(':').map(Number);
   const [endH, endM] = end.split(':').map(Number);
+  const totalMinutesEnd = endH * 60 + endM;
 
-  while (h < endH || (h === endH && m <= endM)) {
-    const hour = h.toString().padStart(2, '0');
-    const min = m.toString().padStart(2, '0');
-    slots.push(`${hour}:${min}`);
-    m += 30;
-    if (m >= 60) {
-      m = 0;
-      h += 1;
+  while (true) {
+    const totalMinutes = h * 60 + m;
+    const appointmentEndTime = totalMinutes + serviceDuration;
+    
+    // Only show slot if appointment can fit within working hours
+    if (appointmentEndTime <= totalMinutesEnd) {
+      const hour = h.toString().padStart(2, '0');
+      const min = m.toString().padStart(2, '0');
+      slots.push(`${hour}:${min}`);
+    } else {
+      break;
     }
+
+    // Move to next slot
+    m += interval;
+    if (m >= 60) {
+      h += Math.floor(m / 60);
+      m = m % 60;
+    }
+    
+    if (h > endH) break;
   }
   return slots;
 }
@@ -88,7 +103,7 @@ function isTimeInBreak(timeSlot, breaks) {
   });
 }
 
-const BookingForm = ({ business, service, workingHours, onClose }) => {
+const BookingForm = ({ business, service, workingHours, onClose, serviceDuration = 30, bufferTime = 0 }) => {
   const [date, setDate] = useState('');
   const [selectedSlot, setSelectedSlot] = useState('');
   const [notes, setNotes] = useState('');
@@ -103,7 +118,8 @@ const BookingForm = ({ business, service, workingHours, onClose }) => {
   // Parse working hours properly
   const parsedHours = parseWorkingHours(workingHours);
   
-  const slots = generateTimeSlots(parsedHours.start, parsedHours.end);
+  // Generate slots based on service duration and buffer time
+  const slots = generateTimeSlots(parsedHours.start, parsedHours.end, serviceDuration, bufferTime);
 
   // Fetch booked slots and break times when date changes
   useEffect(() => {

@@ -123,6 +123,12 @@ router.get('/booked-times/check', appointmentController.getBookedTimes);
 // Get break times for a specific date
 router.get('/break-times/check', appointmentController.getBreakTimes);
 
+// Check appointment reminder status
+router.get('/reminder-status', appointmentController.checkReminderStatus);
+
+// Test reminder - manually send a reminder email
+router.get('/test-reminder', appointmentController.testReminder);
+
 // Create appointment with business logic
 router.post('/create', async (req, res) => {
   try {

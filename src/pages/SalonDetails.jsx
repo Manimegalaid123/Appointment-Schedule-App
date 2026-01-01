@@ -31,6 +31,8 @@ const SalonDetails = () => {
   const [reviews, setReviews] = useState([]);
   const [showBookingForm, setShowBookingForm] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [serviceDuration, setServiceDuration] = useState(30);
+  const [bufferTime, setBufferTime] = useState(0);
 
   useEffect(() => {
     const fetchSalon = async () => {
@@ -38,6 +40,10 @@ const SalonDetails = () => {
         const res = await axios.get(`http://localhost:5000/api/businesses/${id}`);
         if (res.data.success) {
           setSalon(res.data.business);
+          // Set buffer time from business settings
+          if (res.data.business.bufferTime) {
+            setBufferTime(res.data.business.bufferTime);
+          }
           // Fetch reviews
           const reviewsRes = await axios.get(`http://localhost:5000/api/appointments/ratings/${res.data.business.email}`);
           if (reviewsRes.data.success) {
@@ -55,6 +61,8 @@ const SalonDetails = () => {
 
   const handleServiceSelect = (service) => {
     setSelectedService(service);
+    // Set default service duration (30 min) - can be extended with service DB
+    setServiceDuration(service.duration || 30);
     setShowBookingForm(true);
   };
 
@@ -449,6 +457,8 @@ const SalonDetails = () => {
                 business={salon}
                 service={selectedService?.name || selectedService}
                 workingHours={salon.workingHours}
+                serviceDuration={serviceDuration}
+                bufferTime={bufferTime}
                 onClose={() => {
                   setShowBookingForm(false);
                   setSelectedService(null);

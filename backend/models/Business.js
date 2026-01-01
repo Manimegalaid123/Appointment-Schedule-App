@@ -21,6 +21,24 @@ const BusinessSchema = new mongoose.Schema({
     }
   ],
   
+  // Buffer time between appointments (in minutes)
+  bufferTime: { type: Number, default: 0 }, // e.g., 15 minutes for cleanup
+  
+  // Appointment reminder settings
+  reminderSettings: {
+    enableEmailReminder: { type: Boolean, default: true },
+    enableSMSReminder: { type: Boolean, default: false },
+    reminderBefore24h: { type: Boolean, default: true }, // 24 hours before
+    reminderBefore1h: { type: Boolean, default: true }   // 1 hour before
+  },
+  
+  // Email credentials for sending reminders (each salon uses their own email)
+  emailCredentials: {
+    smtpEmail: { type: String, default: null }, // Salon's Gmail address (e.g., hari@gmail.com)
+    smtpPassword: { type: String, default: null }, // Gmail app password
+    useDefaultSMTP: { type: Boolean, default: true } // Use system default SMTP if true
+  },
+  
   averageRating: {
     type: Number,
     default: 0,
