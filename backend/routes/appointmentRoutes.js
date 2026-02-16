@@ -3,7 +3,9 @@ const router = express.Router();
 const appointmentController = require('../controllers/appointmentController');
 const Appointment = require('../models/Appointment');
 const Business = require('../models/Business');
+const User = require('../models/User');
 const sendMail = require('../utils/sendMail');
+const { addEmailToQueue } = require('../services/emailQueueService');
 
 // Create appointment
 router.post('/', appointmentController.createAppointment);
@@ -142,6 +144,20 @@ router.post('/create', async (req, res) => {
       notes
     } = req.body;
     
+    console.log('\n========== APPOINTMENT CREATE REQUEST ==========');
+    console.log('📝 Request body:', req.body);
+    console.log('📝 Service field:', service);
+    console.log('📝 Service type:', typeof service);
+    console.log('========== END REQUEST DEBUG ==========\n');
+    
+    // VALIDATE required fields
+    if (!service || service.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        message: 'Service is required'
+      });
+    }
+    
     console.log('📝 Creating appointment for business:', businessEmail);
     
     // VALIDATE PAST DATE
@@ -208,6 +224,115 @@ router.post('/create', async (req, res) => {
       businessName: savedAppointment.businessName,
       service: savedAppointment.service
     });
+
+    // QUEUE APPOINTMENT CONFIRMATION EMAILS
+    try {
+      console.log('\n📧 [EMAIL QUEUEING] Starting email process for appointment:', savedAppointment._id);
+      
+      const appointmentDate = new Date(date);
+      const appointmentDateStr = appointmentDate.toLocaleDateString('en-US', { 
+        weekday: 'short', 
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric' 
+      });
+
+      const emailVariables = {
+        customerName: customerName,
+        businessName: business.businessName,
+        businessAddress: business.businessAddress,
+        businessEmail: business.email,
+        businessPhone: business.phone,
+        appointmentDate: appointmentDateStr,
+        appointmentTime: time,
+        serviceName: service,
+        businessId: business._id,
+        customerId: null // Will be set after looking up user
+      };
+      
+      // Try to find the customer in User collection to get their ObjectId
+      let customerId = null;
+      try {
+        const customer = await User.findOne({ email: customerEmail });
+        if (customer) {
+          customerId = customer._id;
+          console.log('👤 Found registered customer:', customer.email);
+        } else {
+          console.log('📝 Customer not registered in system, using null for customerId');
+        }
+      } catch (lookupError) {
+        console.log('⚠️ Error looking up customer:', lookupError.message);
+      }
+      
+      emailVariables.customerId = customerId;
+
+      // 1. Send BOOKING CONFIRMATION email immediately
+      console.log('📬 Queueing booking_confirmation email...');
+      await addEmailToQueue(
+        'booking_confirmation',
+        customerEmail,
+        customerName,
+        emailVariables,
+        savedAppointment._id,
+        0 // Send immediately
+      );
+      console.log('✅ Booking confirmation queued');
+
+      // 2. Schedule 24-HOUR REMINDER
+      const reminder24Time = new Date(appointmentDate.getTime() - 24 * 60 * 60 * 1000);
+      const minutesUntilReminder24 = Math.round((reminder24Time - new Date()) / 60000);
+      if (minutesUntilReminder24 > 0) {
+        console.log('📬 Queueing reminder_24h email...');
+        await addEmailToQueue(
+          'reminder_24h',
+          customerEmail,
+          customerName,
+          emailVariables,
+          savedAppointment._id,
+          minutesUntilReminder24
+        );
+        console.log('✅ 24h reminder queued');
+      }
+
+      // 3. Schedule 1-HOUR REMINDER
+      const reminder1Time = new Date(appointmentDate.getTime() - 60 * 60 * 1000);
+      const minutesUntilReminder1 = Math.round((reminder1Time - new Date()) / 60000);
+      if (minutesUntilReminder1 > 0) {
+        console.log('📬 Queueing reminder_1h email...');
+        await addEmailToQueue(
+          'reminder_1h',
+          customerEmail,
+          customerName,
+          emailVariables,
+          savedAppointment._id,
+          minutesUntilReminder1
+        );
+        console.log('✅ 1h reminder queued');
+      }
+
+      // 4. Send NEW BOOKING ALERT to manager
+      console.log('📬 Queueing new_booking_alert email to manager...');
+      await addEmailToQueue(
+        'new_booking_alert',
+        business.email,
+        business.businessName,
+        {
+          ...emailVariables,
+          customerEmail: customerEmail,
+          customerPhone: req.body.customerPhone || 'N/A',
+          notes: notes || 'No special notes'
+        },
+        savedAppointment._id,
+        0 // Send immediately
+      );
+      console.log('✅ Manager alert queued');
+
+      console.log('✉️ All appointment emails queued successfully');
+    } catch (emailError) {
+      console.error('\n❌ Error queuing emails (but appointment was created)');
+      console.error('   Error:', emailError.message);
+      // Don't fail the appointment if email queueing fails
+    }
     
     res.json({
       success: true,

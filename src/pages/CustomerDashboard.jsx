@@ -710,7 +710,7 @@ const CustomerDashboard = () => {
                 >
                   <option value="">-- Select Type --</option>
                   <option value="salon">Salon</option>
-                  <option value="doctor">Doctor</option>
+                  <option value="clinic">Clinic</option>
                   <option value="consultant">Consultant</option>
                 </select>
               </div>
@@ -724,7 +724,7 @@ const CustomerDashboard = () => {
                 }}>
                   <Building2 size={64} style={{ marginBottom: '16px', opacity: 0.5, margin: '0 auto 16px auto' }} />
                   <h3 style={{ margin: '0 0 8px 0', fontSize: '20px' }}>Select a Service Type</h3>
-                  <p style={{ margin: 0 }}>Choose from Salon, Doctor, or Consultant to see available providers</p>
+                  <p style={{ margin: 0 }}>Choose from Salon, Clinic, or Consultant to see available providers</p>
                 </div>
               )}
 
@@ -739,7 +739,7 @@ const CustomerDashboard = () => {
                     textAlign: 'center'
                   }}>
                     Available {selectedType === 'salon' ? 'Salons' : 
-                              selectedType === 'doctor' ? 'Doctors' : 
+                              selectedType === 'clinic' ? 'Clinics' : 
                               selectedType === 'consultant' ? 'Consultants' : 'Services'} ({businesses.length})
                   </h2>
                   
@@ -762,7 +762,7 @@ const CustomerDashboard = () => {
                         <Building2 size={48} style={{ marginBottom: '16px', opacity: 0.3 }} />
                         <h3 style={{ margin: '0 0 8px 0', fontSize: '20px', color: '#374151' }}>
                           No {selectedType === 'salon' ? 'Salons' : 
-                              selectedType === 'doctor' ? 'Doctors' : 
+                              selectedType === 'clinic' ? 'Clinics' : 
                               selectedType === 'consultant' ? 'Consultants' : 'Businesses'} Found
                         </h3>
                         <p style={{ margin: 0, color: '#6b7280' }}>

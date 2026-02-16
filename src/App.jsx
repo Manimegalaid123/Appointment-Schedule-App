@@ -4,7 +4,6 @@ import SignupPage from "./pages/SignupPage";
 import LoginPage from "./pages/LoginPage";
 import HomePage from "./pages/HomePage";
 import SalonDashboard from "./pages/SalonDashboard";
-import ConsultantDashboard from "./pages/ConsultantDashboard";
 import CustomerDashboard from "./pages/CustomerDashboard";
 import SalonDetails from "./pages/SalonDetails";
 
@@ -16,8 +15,8 @@ function App() {
         <Route path="/home" element={<HomePage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/login" element={<LoginPage />} />
+        {/* Unified dashboard for all business managers */}
         <Route path="/salon-dashboard/:businessEmail" element={<SalonDashboard />} />
-        <Route path="/consultant-dashboard/:consultantEmail" element={<ConsultantDashboard />} />
         <Route path="/customer-dashboard/:customerName" element={<CustomerDashboard />} />
         <Route path="/salon/:id" element={<SalonDetails />} />
       </Routes>

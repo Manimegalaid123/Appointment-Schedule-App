@@ -78,6 +78,34 @@ const SalonDetails = () => {
     return (total / reviews.length).toFixed(1);
   };
 
+  const calculateRatingDistribution = () => {
+    const distribution = {
+      5: 0,
+      4: 0,
+      3: 0,
+      2: 0,
+      1: 0
+    };
+
+    reviews.forEach(review => {
+      if (review.rating >= 1 && review.rating <= 5) {
+        distribution[review.rating]++;
+      }
+    });
+
+    return Object.entries(distribution).map(([stars, count]) => ({
+      stars: parseInt(stars),
+      count,
+      percentage: (count / reviews.length * 100).toFixed(1)
+    })).reverse();
+  };
+
+  const getPositiveReviewPercentage = () => {
+    if (reviews.length === 0) return 0;
+    const positiveReviews = reviews.filter(r => r.rating >= 4).length;
+    return ((positiveReviews / reviews.length) * 100).toFixed(0);
+  };
+
   // Check if salon is currently open
   const isCurrentlyOpen = () => {
     if (!salon || !salon.workingHours) return false;
@@ -364,73 +392,114 @@ const SalonDetails = () => {
         {/* Reviews Section */}
         {reviews.length > 0 && (
           <div className="salon-reviews-section">
-            <div className="salon-reviews-header">
-              <h2 className="salon-section-title">Customer Reviews</h2>
-              
-              <div className="salon-reviews-summary">
-                <div className="salon-rating-badge">
-                  <Star size={20} className="salon-rating-star" />
-                  <span className="salon-rating-number">{averageRating}</span>
+            <h2 className="salon-section-title">Customer Reviews</h2>
+            
+            {/* Stat Cards Row */}
+            <div className="salon-stats-cards-row">
+              {/* Average Rating Card */}
+              <div className="salon-stat-card salon-stat-card-purple">
+                <div className="salon-stat-value">{averageRating}</div>
+                <div className="salon-stat-stars">
+                  {renderStars(parseFloat(averageRating), 20)}
                 </div>
-                <span className="salon-reviews-count">
-                  Based on {totalReviews} reviews
-                </span>
+                <div className="salon-stat-label">Average Rating</div>
+              </div>
+
+              {/* Total Reviews Card */}
+              <div className="salon-stat-card salon-stat-card-green">
+                <div className="salon-stat-value">{totalReviews}</div>
+                <div className="salon-stat-label">Total Reviews</div>
+              </div>
+
+              {/* Positive Reviews Card */}
+              <div className="salon-stat-card salon-stat-card-pink">
+                <div className="salon-stat-value">{getPositiveReviewPercentage()}%</div>
+                <div className="salon-stat-label">Positive Reviews</div>
               </div>
             </div>
 
-            <div className="salon-reviews-list">
-              {reviews.slice(0, 6).map((review, idx) => (
-                <div key={idx} className="salon-review-card">
-                  <div className="salon-review-content">
-                    {/* Customer Avatar */}
-                    <div className="salon-customer-avatar">
-                      {(review.customerName || 'C').charAt(0).toUpperCase()}
+            {/* Rating Breakdown Section */}
+            <div className="salon-rating-breakdown">
+              <h3 className="salon-breakdown-title">Rating Breakdown</h3>
+              <div className="salon-rating-distribution">
+                {calculateRatingDistribution().map((item) => (
+                  <div key={item.stars} className="salon-rating-row">
+                    <div className="salon-rating-row-label">
+                      <span className="salon-rating-stars-count">{item.stars}</span>
+                      <Star size={16} className="salon-breakdown-star-icon" />
                     </div>
+                    <div className="salon-rating-bar-container">
+                      <div 
+                        className={`salon-rating-bar salon-rating-bar-${item.stars}`}
+                        style={{ width: `${item.percentage}%` }}
+                      />
+                    </div>
+                    <div className="salon-rating-row-count">
+                      <span className="salon-percentage">{item.percentage}%</span>
+                      <span className="salon-count">{item.count}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
 
-                    <div className="salon-review-details">
-                      {/* Review Header */}
-                      <div className="salon-review-header">
-                        <div className="salon-customer-info">
-                          <h4 className="salon-customer-name">
-                            {review.customerName || 'Customer'}
-                          </h4>
-                          <div className="salon-review-meta">
-                            <div className="salon-review-stars">
-                              {renderStars(review.rating, 14)}
+            {/* Reviews List */}
+            <div className="salon-reviews-list-container">
+              <h3 className="salon-reviews-list-title">Latest Reviews</h3>
+              <div className="salon-reviews-list">
+                {reviews.slice(0, 6).map((review, idx) => (
+                  <div key={idx} className="salon-review-card">
+                    <div className="salon-review-content">
+                      {/* Customer Avatar */}
+                      <div className="salon-customer-avatar">
+                        {(review.customerName || 'C').charAt(0).toUpperCase()}
+                      </div>
+
+                      <div className="salon-review-details">
+                        {/* Review Header */}
+                        <div className="salon-review-header">
+                          <div className="salon-customer-info">
+                            <h4 className="salon-customer-name">
+                              {review.customerName || 'Customer'}
+                            </h4>
+                            <div className="salon-review-meta">
+                              <div className="salon-review-stars">
+                                {renderStars(review.rating, 14)}
+                              </div>
+                              <span className="salon-review-date">
+                                {review.daysAgo !== undefined ? 
+                                  `${review.daysAgo === 0 ? 'Today' : `${review.daysAgo} days ago`}` :
+                                  new Date(review.ratedAt).toLocaleDateString()
+                                }
+                              </span>
                             </div>
-                            <span className="salon-review-date">
-                              {review.daysAgo !== undefined ? 
-                                `${review.daysAgo === 0 ? 'Today' : `${review.daysAgo} days ago`}` :
-                                new Date(review.ratedAt).toLocaleDateString()
-                              }
-                            </span>
+                          </div>
+
+                          <div className="salon-service-tag">
+                            {review.service}
                           </div>
                         </div>
 
-                        <div className="salon-service-tag">
-                          {review.service}
-                        </div>
+                        {/* Review Content */}
+                        {review.notes && (
+                          <p className="salon-review-text">
+                            "{review.notes}"
+                          </p>
+                        )}
                       </div>
-
-                      {/* Review Content */}
-                      {review.notes && (
-                        <p className="salon-review-text">
-                          "{review.notes}"
-                        </p>
-                      )}
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-
-            {reviews.length > 6 && (
-              <div className="salon-view-all-reviews">
-                <button className="salon-view-all-btn">
-                  View All Reviews ({reviews.length})
-                </button>
+                ))}
               </div>
-            )}
+
+              {reviews.length > 6 && (
+                <div className="salon-view-all-reviews">
+                  <button className="salon-view-all-btn">
+                    View All Reviews ({reviews.length})
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

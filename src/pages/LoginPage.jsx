@@ -58,16 +58,10 @@ const LoginPage = () => {
       if (role === 'customer') {
         navigate(`/customer-dashboard/${name}`);
       } else if (role === 'manager') {
-        if (businessType === 'salon') {
-          navigate(`/salon-dashboard/${businessEmail}`);
-        } else if (businessType === 'consultancy') {
-          navigate(`/consultant-dashboard/${businessEmail}`);
-        } else {
-          alert('No dashboard available for this business type.');
-          navigate('/');
-        }
-      } else if (role === 'consultant') {
-        navigate(`/consultant-dashboard/${businessEmail}`);
+        navigate(`/salon-dashboard/${businessEmail}`);
+      } else {
+        alert('No dashboard available for this role.');
+        navigate('/');
       }
     } catch (error) {
       setErrors({ submit: error.response?.data?.message || 'Invalid credentials. Please check your email and password.' });

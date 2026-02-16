@@ -61,7 +61,7 @@ const HomePage = () => {
                 </h1>
                 <p className="hero-description">
                   Connect customers with businesses for seamless appointment booking. 
-                  Whether you're running a salon, hospital, or consultancy - we've got you covered.
+                  Whether you're running a salon, clinic, or consultancy - we've got you covered.
                 </p>
               </div>
               
@@ -135,7 +135,7 @@ const HomePage = () => {
                     <span className="calendar-month">December 2025</span>
                     <div className="appointment-indicator">
                       <span className="time">2:30 PM</span>
-                      <span className="type">Doctor Consultation</span>
+                      <span className="type">Clinic Consultation</span>
                       <span className="status">Confirmed ✓</span>
                     </div>
                   </div>
@@ -192,7 +192,7 @@ const HomePage = () => {
               </div>
               <h3 className="feature-title">Multiple Business Types</h3>
               <p className="feature-description">
-                From salons and hospitals to education centers and consultancies. 
+                From salons and clinics to education centers and consultancies. 
                 Our platform adapts to any business model seamlessly.
               </p>
             </div>
@@ -294,7 +294,7 @@ const HomePage = () => {
               </div>
               <h3 className="business-title">Healthcare</h3>
               <p className="business-subtitle">
-                Hospitals, clinics, and medical centers
+                Clinics, medical centers, and healthcare providers
               </p>
               <ul className="business-features">
                 <li>• Doctor specializations</li>

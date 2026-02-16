@@ -29,7 +29,7 @@ const SignupPage = () => {
       services: '',
       workingHours: ''
     },
-    hospital: {
+    clinic: {
       businessName: '',
       specialization: '',
       doctors: '',
@@ -41,7 +41,7 @@ const SignupPage = () => {
       businessAddress: '',
       workingHours: ''
     },
-    consultancy: {
+    consultant: {
       businessName: '',
       services: '',
       businessAddress: '',
@@ -103,7 +103,7 @@ const SignupPage = () => {
     if (validateStep(currentStep)) {
       // Prepare businessData for backend
       let processedBusinessData = { ...businessData };
-      if (businessType === 'salon' || businessType === 'consultancy') {
+      if (businessType === 'salon' || businessType === 'consultant') {
         if (processedBusinessData.services) {
           processedBusinessData.services = processedBusinessData.services
             .split(',')
@@ -111,7 +111,7 @@ const SignupPage = () => {
             .filter(Boolean);
         }
       }
-      if (businessType === 'hospital' && processedBusinessData.doctors) {
+      if (businessType === 'clinic' && processedBusinessData.doctors) {
         processedBusinessData.doctors = processedBusinessData.doctors
           .split(',')
           .map(d => d.trim())
@@ -137,12 +137,9 @@ const SignupPage = () => {
         const res = await axios.post('http://localhost:5000/api/auth/signup', userData);
         alert(res.data.message || `Account created successfully! Welcome ${role === 'customer' ? 'Customer' : 'Business Manager'}!`);
 
-        if (role === 'manager' && businessType === 'salon') {
+        if (role === 'manager') {
           const businessEmail = encodeURIComponent(formData.email);
           navigate(`/salon-dashboard/${businessEmail}`);
-        } else if (role === 'manager' && businessType === 'consultancy') {
-          const businessEmail = encodeURIComponent(formData.email);
-          navigate(`/consultant-dashboard/${businessEmail}`);
         } else if (role === 'customer') {
           const customerName = userFormData.name ? encodeURIComponent(userFormData.name) : 'customer';
           navigate(`/customer-dashboard/${customerName}`);
@@ -424,9 +421,9 @@ const SignupPage = () => {
                         <h4 className="business-type-title">{type.charAt(0).toUpperCase() + type.slice(1)}</h4>
                         <p className="business-type-description">
                           {type === 'salon' && 'Beauty & wellness services'}
-                          {type === 'hospital' && 'Healthcare & medical'}
+                          {type === 'clinic' && 'Healthcare & clinic'}
                           {type === 'education' && 'Learning & training'}
-                          {type === 'consultancy' && 'Professional services'}
+                          {type === 'consultant' && 'Professional services'}
                         </p>
                       </div>
                     ))}

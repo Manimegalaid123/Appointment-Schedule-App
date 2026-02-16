@@ -11,6 +11,16 @@ connectDB();
 const { initializeReminderScheduler } = require('./utils/appointmentReminder');
 initializeReminderScheduler();
 
+// Initialize email worker
+const { processEmailQueue } = require('./workers/emailWorker');
+console.log('📧 Email worker initialized - checking queue every 1 minute');
+setInterval(() => {
+  processEmailQueue();
+}, 60000); // Check every 60 seconds
+
+// Run once at startup
+processEmailQueue();
+
 const app = express();
 app.use(cors());
 app.use(express.json());

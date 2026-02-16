@@ -555,6 +555,19 @@ const RatingStatistics = ({ businessEmail }) => {
   );
 };
 
+// Helper function to get business type display name
+const getBusinessTypeName = (type) => {
+  const typeNames = {
+    'salon': 'Salon',
+    'clinic': 'Clinic',
+    'consultant': 'Consultant',
+    'gym': 'Gym',
+    'education': 'Education',
+    'spa': 'Spa'
+  };
+  return typeNames[type?.toLowerCase()] || type || 'Business';
+};
+
 const SalonDashboard = () => {
   const { businessEmail } = useParams();
   const [activeTab, setActiveTab] = useState('appointments');
@@ -615,7 +628,8 @@ const SalonDashboard = () => {
             phone: businessData.phone,
             services: businessData.services || [],
             workingHours: businessData.workingHours || '9:00 AM - 7:00 PM',
-            imageUrl: businessData.imageUrl || null
+            imageUrl: businessData.imageUrl || null,
+            businessType: businessData.businessType || 'salon'
           });
           
           console.log('✅ Salon info updated:', {
@@ -1262,8 +1276,8 @@ const SalonDashboard = () => {
       <div className="salon-loading-container">
         <div className="salon-loading-content">
           <RefreshCw size={48} className="salon-loading-spinner" />
-          <h3>Loading Salon Dashboard</h3>
-          <p>Please wait while we load your salon information...</p>
+          <h3>Loading Dashboard</h3>
+          <p>Please wait while we load your business information...</p>
         </div>
       </div>
     );
@@ -1309,7 +1323,7 @@ const SalonDashboard = () => {
               )}
               <div className="salon-info-section">
                 <h1 className="salon-name">{salonInfo?.name}</h1>
-                <p className="salon-tagline">Professional Salon Management</p>
+                <p className="salon-tagline">Professional {getBusinessTypeName(salonInfo?.businessType)} Management</p>
               </div>
             </div>
           </div>
@@ -1734,102 +1748,7 @@ const SalonDashboard = () => {
                     </div>
                   </div>
 
-                  <div className="salon-booking-section" style={{ marginTop: '2rem' }}>
-                    <h3 className="salon-section-title">📧 Email Configuration</h3>
-                    <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '1rem' }}>
-                      Configure your salon's Gmail account to send appointment reminders. Leave blank to use default system email.
-                    </p>
-                    
-                    <div style={{ background: '#fff8f0', padding: '1.5rem', borderRadius: '8px', border: '1px solid #fecaca', marginBottom: '1rem' }}>
-                      <h4 style={{ marginTop: 0, color: '#b45309' }}>⚠️ How to Get Gmail App Password:</h4>
-                      <ol style={{ color: '#666', fontSize: '0.9rem', lineHeight: '1.8' }}>
-                        <li>Go to <a href="https://myaccount.google.com" target="_blank" rel="noopener noreferrer">myaccount.google.com</a></li>
-                        <li>Click <strong>Security</strong></li>
-                        <li>Search for <strong>"App passwords"</strong></li>
-                        <li>Select <strong>Mail</strong> and <strong>Windows Computer</strong></li>
-                        <li>Copy the 16-character password (spaces included)</li>
-                      </ol>
-                    </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                      <div>
-                        <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#1e293b' }}>
-                          Gmail Address:
-                        </label>
-                        <input
-                          type="email"
-                          placeholder="e.g., hari@gmail.com"
-                          value={salonInfo.emailCredentials?.smtpEmail || ''}
-                          onChange={(e) => setSalonInfo({
-                            ...salonInfo,
-                            emailCredentials: { ...salonInfo.emailCredentials, smtpEmail: e.target.value }
-                          })}
-                          style={{
-                            width: '100%',
-                            padding: '10px 12px',
-                            border: '1px solid #ddd',
-                            borderRadius: '6px',
-                            fontSize: '1rem',
-                            boxSizing: 'border-box'
-                          }}
-                        />
-                        <small style={{ color: '#999' }}>Your Gmail address to send reminders from</small>
-                      </div>
-
-                      <div>
-                        <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#1e293b' }}>
-                          Gmail App Password:
-                        </label>
-                        <input
-                          type="password"
-                          placeholder="16-character app password (with spaces)"
-                          value={salonInfo.emailCredentials?.smtpPassword || ''}
-                          onChange={(e) => setSalonInfo({
-                            ...salonInfo,
-                            emailCredentials: { ...salonInfo.emailCredentials, smtpPassword: e.target.value }
-                          })}
-                          style={{
-                            width: '100%',
-                            padding: '10px 12px',
-                            border: '1px solid #ddd',
-                            borderRadius: '6px',
-                            fontSize: '1rem',
-                            boxSizing: 'border-box'
-                          }}
-                        />
-                        <small style={{ color: '#999' }}>Get this from Gmail app passwords (16 characters)</small>
-                      </div>
-
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', margin: 0 }}>
-                        <input
-                          type="checkbox"
-                          checked={salonInfo.emailCredentials?.useDefaultSMTP ?? true}
-                          onChange={(e) => setSalonInfo({
-                            ...salonInfo,
-                            emailCredentials: { ...salonInfo.emailCredentials, useDefaultSMTP: e.target.checked }
-                          })}
-                          style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                        />
-                        <span style={{ color: '#666' }}>Use default system email (if credentials not provided)</span>
-                      </label>
-
-                      <button
-                        onClick={handleSaveAppointmentSettings}
-                        style={{
-                          marginTop: '1rem',
-                          padding: '10px 16px',
-                          background: '#50C9CE',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          fontWeight: '500'
-                        }}
-                      >
-                        Save Email Settings
-                      </button>
-                    </div>
-                  </div>
 
                   <div className="salon-booking-section">
                     <h3 className="salon-section-title">Online Booking</h3>
